@@ -1,4 +1,4 @@
-# e-yantra
+# e-yantra_
 NS#1508
 
 This repository consists of all the files of the e-yantra competition of theme Nutty Squirrel
