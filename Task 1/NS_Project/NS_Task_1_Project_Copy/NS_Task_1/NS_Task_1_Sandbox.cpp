@@ -1,136 +1,245 @@
 /*
 *
 * Team Id: 1508
-* Author List: Gudapati Nitish, Deeepak S V, Jinesh R, Himadri Poddar
+* Author List: Gudapati Nitish, Deepak S V, Jinesh R, Himadri Poddar
 * Filename: NS_Task_1_Sandbox.cpp
 * Theme: Nutty Squirrel -- Specific to eYRC
-* Functions: forward_wls(unsigned char), left_turn_wls(void), right_turn_wls(void)
+* Functions: ir_array(void), line_track(void), F(void), L(void), R(void), forward_wls(unsigned char), left_turn_wls(void), right_turn_wls(void)
 *			Square(void), Task_1_1(void), Task_1_2(void)
-* Global Variables: left_sensor, centre_sensor, right_sensor
+* Global Variables: line_memory, line_memory_rw, line_track_memory, obstracle_front
 *
 */
 
 #include "NS_Task_1_Sandbox.h"
 
-//variables that store the adc values of the white line sensors
-unsigned char left_sensor, centre_sensor, right_sensor;
+/*
+*	Variable name: line_memory
+*	To specify preferred turn direction for 'line_track()' in '0b101' case and also set if line tracking is to be done with with 2 or 3 sensors.
+*	Possible values:
+*		0 - Turn left during '0b101' case in 'line_track()'
+*		1 - Turn right during '0b101' case in 'line_track()'
+*		2 - Specifies 'line_track()' to track line only with center-right sensors (2 sensors)
+*		3 - Specifies 'line_track()' to track line only with center-left sensors (2 sensors)
+*/
+unsigned char line_memory;
 
-//variable to store the digital value of the whiteline sensor
-unsigned char line_sensor, line_memory, line_memory_rw=1 , line_track_memory = 0;
+/*
+*	Variable name: line_memory_rw
+*	Switch variable to allow modification of 'line_memory'
+*	Possible values:
+*		0 - 'line_memory' set to read-only
+*		1 - 'line_memory' set to read-write
+*/
+unsigned char line_memory_rw = 1;
 
-#define confidence_max 20   //max value of confidence in soft debouncing
-#define confidence_thresh 14  //threshold for dececion in soft debouncing
-//int x = 0;
+/*
+*	Variable name: line_track_memory
+*	Stores the previous turn value, and used to guide the bot when out of the track in 'line_track()'
+*	Possible values:
+*		0 - stored after left turn
+*		1 - stored after right turn
+*/
+unsigned char line_track_memory = 0;
+
+/*
+*	Variable name: obstracle_front
+*	Reduces forward distance travelled to align the bot after crossing a node if an independant line (obstracle) is in vicinity (eg. 1st node)
+*	Possible values:
+*		0 - no independant line in vicinity
+*		1 - independant line present in vicinity
+*/
+unsigned char obstracle_front = 0;
+
+#define confidence_max 20			//max value of confidence in software debouncing
+#define confidence_thresh 14		//threshold for dececion in software debouncing
+
+/* The colours are given specific numerical codes*/
+#define clear 0
+#define red 1
+#define green 2
+#define brown 3
 
 /*
 *
 * Function Name: ir_array
 * Input: NONE
-* Output: unsigned char -> returns a combined value corresponding to the white line sensor
+* Output: unsigned char -> returns a combined value corresponding to the white line sensor data (only three LSBs or least significant bits of the char is used)
 * Logic: Sets a threshold value to distinguish white and black and sets 1 for black and 0 for white
 *		Threshold = 180, if adc_value > 180 => 1 (black), and vice versa
-* Example Call: ir_array(); //Returns one of 100, 010, 001, 110, etc.
+* Example Call: ir_array(); //Returns one of 0(0b000), 1(0b001), 2(0b010), ....., 7(0b111).
 *
 */
 unsigned char ir_array(void)
 {
+	unsigned char left_sensor, centre_sensor, right_sensor;									//variables that store the adc values of the white line sensors
 	left_sensor = ADC_Conversion(1);
 	centre_sensor = ADC_Conversion(2);
 	right_sensor = ADC_Conversion(3);
-	line_sensor = (left_sensor > 180) * 4 + (centre_sensor > 180) * 2 + (right_sensor > 180);
-	//printf("\n %03d", line_sensor);
-	return line_sensor;
+	return ((left_sensor > 180) * 4 + (centre_sensor > 180) * 2 + (right_sensor > 180));	//converting adc values into a single decimal number based on the binary value
 }
 
 /*
 *
 * Function Name: line_track
 * Input: NONE
-* Output: Follows the black line
-* Logic: Sets a threshold value to distinguish white and black and sets 1 for black and 0 for white
-*		Threshold = 180, if adc_value > 180 => 1 (black), and vice versa
-* Example Call: ir_array(); //Returns one of 100, 010, 001, 110, etc.
+* Output: Follows the black line with either two or three sensors based on 'line_memory' value
+* Logic:
+*	When tracking with three sensors:
+*		If, centre sensor is on line => it goes straight, left sensor on line => slight right, right sensor on line => slight left
+*		If two consecutive sensors are on the line, correspondingly it goes straight
+*	When tracking with two sensors: (This is done to avoid conflict at certain nodes where the line is thick on one side)
+*		Based on the 'line_memory' value, it tracks using left-centre or right-centre sensors
+*	When it is out of line, then it moves based on the previous movement stored in 'line_track_memory'
+*	When a node is detected (all three sensors are on black) , the control exits the line track function (software debouncing is done here)
+*Example Call: line_track();
 *
 */
 void line_track(void)
 {
-	int confidence = 0;
-	//	if (x == 1)
-	//		printf("\nline_track: %d", ir_array());
+	int confidence = 0;								// counter variable for software debounce 
 	while (1)
 	{
-		//	velocity(100, 100);
-		velocity(150, 150);
-		if (ir_array() == 0b010)
+		velocity(250, 250);
+		if (ir_array() == 0b010)					// only centre sensor on black line
 		{
-			if (line_memory == 2) {
-				forward(); velocity(25, 50);
+			if (line_memory == 2)					// line track with right-centre sensors 
+			{
+				forward(); velocity(125, 250);		// curve left
 			}
-			else if (line_memory == 3) {
-				forward(); velocity(50, 25);
+			else if (line_memory == 3)				// line track with left-centre sensors
+			{
+				forward(); velocity(250, 125);		// curve right
+			}
+			else				
+				forward();							// when tracking with all sensors
+		}
+		else if (ir_array() == 0b001)				// only right sensor on black	
+		{
+			if (line_memory == 2)					// line track with right-centre sensors 
+			{
+				forward(); velocity(250, 125);		// curve right
 			}
 			else
-				forward();
+				soft_right();
+			line_track_memory = 1;					// store the movement 
 		}
-		else if (ir_array() == 0b001)
+		else if (ir_array() == 0b100)				// only left sensor on black	
 		{
-			soft_right();
-			line_track_memory = 1;
+			if (line_memory == 3)					// line track with left-centre sensors
+			{
+				forward(); velocity(125, 250);		// curve left
+			}
+			else
+				soft_left();
+			line_track_memory = 0;					// store the movement 
 		}
-		else if (ir_array() == 0b100)
+		else if (ir_array() == 0b011)				// right-centre sensor on black	
 		{
-			soft_left();
-			line_track_memory = 0;
-		}
-		else if (ir_array() == 0b011)
-		{
-			if (line_memory == 3)
+			if (line_memory == 3)					// line track with left-centre sensors
 				soft_right();
 			else
 				forward();
-			line_track_memory = 1;
+			line_track_memory = 1;					// store the movement 
 		}
-		else if (ir_array() == 0b110)
+		else if (ir_array() == 0b110)				// left-centre sensor on black	
 		{
-			if (line_memory == 2)
+			if (line_memory == 2)					// line track with right-centre sensors 
 				soft_left();
 			else
 				forward();
-			line_track_memory = 0;
+			line_track_memory = 0;					// store the movement 
 		}
-		else if (ir_array() == 0b101)
+		else if (ir_array() == 0b101)				// rare case of left-right sensors
 		{
-			if (line_memory == 0)
-				soft_left();
+			if (line_memory == 0)	
+				soft_left();						//line_memory = 0 => if previous was movement right_turn_wls, right is given priority
 			else if (line_memory == 1)
-				soft_right();
-			else if (line_memory == 2) {
+				soft_right();						//line_memory = 1 => if previous was movement left_turn_wls, left is given priority
+			else if (line_memory == 2)				// line track with right-centre sensors 
+			{
 				left();
 			}
-			else if (line_memory == 3) {
+			else if (line_memory == 3)				// line track with left-centre sensors
+			{
 				right();
-				printf("\nRIGHT");
 			}
 		}
-		else if (ir_array() == 0) {
+		else if (ir_array() == 0)					// out of line
+		{
 			if (line_track_memory == 0)
-				left();
+				soft_left();
 			else if (line_track_memory == 1)
-				right();
+				soft_right();
 		}
-		else
+		else										// node detected
 		{
 			stop();
-			for (int i = 0; i < 50; i++) {
-				if (ir_array() == 7)
+			for (int i = 0; i < 10; i++)			// Confirms node detection via software debouncing
+			{
+				if (ir_array() == 7)				 
+				{
 					confidence++;
-				_delay_ms(2);
+				}
+				_delay_ms(1);
 			}
-			if (confidence > 40)
-				break;
+			if (confidence > 5)
+				break;								// breaks from loop (eventually function) after confirmation
 			confidence = 0;
 		}
-	//	velocity(150, 150);
+		_delay_ms(1);
+	}
+}
+
+
+/********************************************************************************/
+
+/*						This function needs to be edited						*/	
+/*									 Himadri									*/
+
+/********************************************************************************/
+/*
+*
+* Function Name: back_track
+* Input: NONE
+* Output: Follows the black line with either two or three sensors based on 'line_memory' value
+* Logic:
+*	When an obstracle is detected, the bot back-tracks the line without a U-turn.
+*	This is done to avoid miscount of nodes when the blocks are at critical positions.
+*	When tracking with three sensors:
+*		If, centre sensor is on line => it goes straight, left sensor on line => slight right, right sensor on line => slight left
+*		If two consecutive sensors are on the line, correspondingly it goes straight
+*	When tracking with two sensors: (This is done to avoid conflict at certain nodes where the line is thick on one side)
+*		Based on the 'line_memory' value, it tracks using left-centre or right-centre sensors
+*	When it is out of line, then it moves based on the previous movement stored in 'line_track_memory'
+*	When a node is detected (all three sensors are on black) , the control exits the line track function (software debouncing is done here)
+*Example Call: back_track();
+*
+*/
+void back_track(void)
+{
+	int confidence = 0;								// counter variable for software debounce 
+	while (1)
+	{
+		// Type the algorithm here
+
+
+		// Software debouncing
+												// node detected
+		{
+			stop();
+			for (int i = 0; i < 10; i++)			// Confirms node detection via software debouncing
+			{
+				if (ir_array() == 7)
+				{
+					confidence++;
+				}
+				_delay_ms(1);
+			}
+			if (confidence > 5)
+				break;								// breaks from loop (eventually function) after confirmation
+			confidence = 0;
+		}
+		_delay_ms(1);
 	}
 }
 
@@ -145,17 +254,39 @@ void line_track(void)
 */
 void forward_wls(unsigned char node)
 {
-	while (1)
+	while (node-- > 0)									// runs for 'node' number of times (number of nodes)
 	{
-		/*left_sensor = ADC_Conversion(1);
-		centre_sensor = ADC_Conversion(2);
-		right_sensor = ADC_Conversion(3);
-		printf("\n %d, %d, %d", left_sensor, centre_sensor, right_sensor);*/
-		//ir_array();
-		//left_turn_wls();
-		line_track();
+		int confidence = 0;								// counter variable for software debounce 
+		forward(); velocity(250, 250);
+		while (1)
+		{
+			for (int i = 0; i < confidence_max; i++)	// To confirm when out of a node via software debouncing
+			{
+				if (ir_array() != 0b111)
+					confidence++;						// Increment 'confidence' when past node 
+				if (ir_array() == 0b011)				// left sensor out of line
+				{
+					forward(); velocity(250, 125);		// curve right
+				}
+				if (ir_array() == 0b110)				// right sensor out of line
+				{
+					forward(); velocity(125, 250);		// curve left
+				}
+			}
+			if (confidence > confidence_thresh)
+				break;									// confirms and breaks out of the loop
+			_delay_ms(1);
+			confidence = 0;								// resets confidence value
+		}
+		forward();	velocity(150, 150);
+		if (obstracle_front == 1)
+			_delay_ms(63);								// to align the centre of the bot close to the node and prevent false detection when there is an independant black line (obstracle) in the front (eg. first node)
+		else
+			_delay_ms(100);								// to align the centre of the bot on the node to ease turning
+		stop();
 	}
 }
+
 /*
 *
 * Function Name: left_turn_wls
@@ -167,44 +298,48 @@ void forward_wls(unsigned char node)
 */
 void left_turn_wls(void)
 {
-	int confidence = 0;
-	for (int i = 0; i < confidence_max; i++) {
-		if ((ir_array() & 4) == 4)
-			confidence++;
-		//	_delay_ms(1);
+	int confidence = 0;									// counter variable for software debounce 				
+	for (int i = 0; i < confidence_max; i++)			// confirms if left sensor is on black line
+	{
+		if ((ir_array() & 0b100) == 0b100)
+			confidence++;								
 	}
-	if (confidence > confidence_thresh) {
-		left();		velocity(150, 150);		//Turn left if left ir sensor is on a black line till it is out
-		while (1) {
-			confidence = 0;
-			for (int i = 0; i < confidence_max; i++) {
-				if ((ir_array() & 4) == 0)
+	if (confidence > confidence_thresh) 
+	{
+		left();		velocity(150, 150);
+		while (1)										// if left sensor is on black, turn left until it is out of the black line
+		{
+			confidence = 0;								// resets 'confidence' variable
+			for (int i = 0; i < confidence_max; i++)	// confirms if out of line via software debouncing
+			{
+				if ((ir_array() & 0b100) == 0)
 					confidence++;
-				//	_delay_ms(1);
 			}
 			if (confidence > confidence_thresh)
-				break;
+				break;									// confirms and breaks out of the loop
 		}
 	}
 	while (1)
-	{								//Turn left until left ir sensor detects a black line
-
-		left();		// velocity(150, 150);
-		if (line_memory == 3) velocity(0, 100); else velocity(100, 100);
+	{
+		left();											// Turn left until left ir sensor detects a black line
+		if (line_memory == 3)
+			velocity(0, 100);							// soft left at critical left turns (eg. last before node)
+		else 
+			velocity(100, 100);	
 		confidence = 0;
-		for (int i = 0; i < confidence_max; i++) {
-			if ((ir_array() & 4) == 4)
+		for (int i = 0; i < confidence_max; i++)		// confirms if black line is detected by left sensor
+		{
+			if ((ir_array() & 0b100) == 0b100)
 				confidence++;
-			//	_delay_ms(1);
 		}
-		if (confidence > confidence_thresh)
+		if (confidence > confidence_thresh)				// confirms and breaks out of the loop
 			break;
 	}
 	_delay_ms(20);
 	stop();
-	_delay_ms(100);
+	_delay_ms(100);										// to stabilize after a turn
 	if(line_memory_rw)
-		line_memory = 0;			// stores in memory that last turn was left
+		line_memory = 0;								//	updates 'line_memory' to set line track preference to left turn at 0b101 case
 }
 
 /*
@@ -214,59 +349,52 @@ void left_turn_wls(void)
 * Output: void
 * Logic: Uses white line sensors to turn right until black line is encountered
 * Example Call: right_turn_wls(); //Turns right until black line is encountered
+*
 */
-/*void right_turn_wls(void)
-{
-	while (ir_array() & 4 == 4)
-		right();	velocity(100, 100);	//Turn right if right ir sensor is on a black line till it is out
-	while (!(ir_array()&1))
-	{									//Turn right until right ir sensor detects a black line
-		right();	velocity(100, 100);
-		_delay_ms(10);
-	}
-	stop();
-	line_memory = 1;
-}*/
 void right_turn_wls(void)
 {
-	int confidence = 0;
-	for (int i = 0; i < confidence_max; i++) {
-		if ((ir_array() & 1) == 1)
+	int confidence = 0;									// counter variable for software debounce
+	for (int i = 0; i < confidence_max; i++)			// confirms if right sensor is on black line
+	{
+		if ((ir_array() & 0b001) == 0b001)
 			confidence++;
-		//	_delay_ms(1);
 	}
-	if (confidence > confidence_thresh) {
-		right();					//Turn right if right ir sensor is on a black line till it is out
-		if (line_memory == 2) velocity(0, 100); else velocity(100, 100);
-		while (1) {
-			confidence = 0;
-			for (int i = 0; i < confidence_max; i++) {
+	if (confidence > confidence_thresh) 
+	{
+		right();	
+		while (1)										// if right sensor is on black, turn right until it is out of the black line
+		{
+			confidence = 0;								// resets 'confidence' variable
+			for (int i = 0; i < confidence_max; i++)	// confirms if out of line via software debouncing
+			{
 				if ((ir_array() & 1) == 0)
 					confidence++;
-				//	_delay_ms(1);
 			}
 			if (confidence > confidence_thresh)
-				break;
+				break;									// confirms and breaks out of the loop
 		}
 	}
 	while (1)
-	{								//Turn right until right ir sensor detects a black line
-
-		right();		velocity(100, 100);
+	{
+		right();		velocity(100, 100);				// Turn right until right ir sensor detects a black line
+		if (line_memory == 2)
+			velocity(0, 100);							// soft right at critical right turns
+		else
+			velocity(100, 100);
 		confidence = 0;
-		for (int i = 0; i < confidence_max; i++) {
+		for (int i = 0; i < confidence_max; i++)		// confirms if black line is detected by right sensor
+		{
 			if ((ir_array() & 1) == 1)
 				confidence++;
-			//	_delay_ms(1);
 		}
-		if (confidence > confidence_thresh)
+		if (confidence > confidence_thresh)				// confirms and breaks out of the loop
 			break;
 	}
 	_delay_ms(20);
 	stop();
-	_delay_ms(100);
+	_delay_ms(100);										// to stabilize after a turn
 	if(line_memory_rw)
-		line_memory = 1;			// stores in memory that last turn was right
+		line_memory = 1;								//	updates 'line_memory' to set line track preference to right turn at 0b101 case
 }
 
 /*
@@ -297,109 +425,190 @@ void Square(void)
 	_delay_ms(500);
 }
 
-void node_cross(void)
+/*
+*
+* Function Name: F
+* Input: void
+* Output: void
+* Logic: Use this function to cross a node, track the line and stop at the next node
+* Example Call: F();
+*
+*/
+void F() 
 {
-	int confidence = 0;
-	forward(); velocity(50, 50);
+	forward_wls(1);
+	line_track();
+}
+
+/*
+*
+* Function Name: L
+* Input: void
+* Output: void
+* Logic: Use this function to cross a node, then turn left and finally stop at the next node 
+* Example Call: L();
+*
+*/
+void L() 
+{
+	forward_wls(1);
+	left_turn_wls();
+	line_track();
+}
+
+/*
+*
+* Function Name: R
+* Input: void
+* Output: void
+* Logic: Use this function to cross a node, then turn right and finally stop at the next node 
+* Example Call: R();
+*
+*/
+void R() 
+{
+	forward_wls(1);
+	right_turn_wls();
+	line_track();
+}
+
+/*
+*
+* Function Name: align
+* Input: void
+* Output: void
+* Logic: Use this function to cross a align the bot parallel to the line
+* Example Call: align();
+*
+*/
+void align()
+{
 	while (1)
 	{
-		for (int i = 0; i < confidence_max; i++) {
-			if (ir_array() != 7)
-				confidence++;
-			if (ir_array() == 3)
-				forward(); velocity(50, 40);
-			if (ir_array() == 6)
-				forward(); velocity(40, 50);
-			//	_delay_ms(1);
+		if (ir_array() == 0b001 || ir_array() == 0b011)
+		{
+			right();	velocity(25, 25);
 		}
-		if (confidence > confidence_thresh)
+		else if (ir_array() == 0b100 || ir_array() == 0b110)
+		{
+			left();		velocity(25, 25);
+		}
+		if (ir_array() == 0b010)
+		{
+			stop();												//stop and break after aligned
 			break;
-		confidence = 0;
+		}
 	}
-	forward();	velocity(50, 50);
-	_delay_ms(220);
 	stop();
 }
 
-void F() {
-//	forward(); velocity(50, 50);
-	node_cross();
-	printf("\n%d", ir_array());
-	line_track();
-	printf("\n%d\n", ir_array());
-}
-void L() {
-//	forward(); velocity(40, 50);
-	node_cross();
-	printf("\n%d", ir_array());
-	left_turn_wls();
-	printf("\n%d", ir_array());
-	line_track();
-	printf("\n%d\n", ir_array());
-}
-void R() {
-//	forward(); velocity(50, 40);
-	node_cross();
-	printf("\n%d", ir_array());
-	right_turn_wls();
-	printf("\n%d", ir_array());
-	line_track();
-	printf("\n%d\n", ir_array());
+/*
+*
+* Function Name: filter_color
+* Input: void
+* Output: int
+* Logic: The function filters the colour and returns the corresponding colour code for the colour of the block
+* Example Call: filter_color();
+*
+*/
+int filter_color()
+{
+	int r = 0, g = 0, b = 0;														// variables to store r, g, b values
+	filter_red();
+	r = color_sensor_pulse_count;													// gets r value
+	filter_green();
+	g = color_sensor_pulse_count;													// gets g value
+	filter_blue();
+	b = color_sensor_pulse_count;													// gets b value
+	if (r > 3000 && g < 1000 && b < 1000)
+		return red;																	// determines if red
+	else if (r < 1000 && g>3000 && b < 1500)
+		return green;																// determines if green
+	else if (r > 2000 && r < 4000 && g > 1000 && g < 3000 && b > 500 && b < 2000)
+		return brown;																// determines if brown
+	return clear;																	// determines if none of the above colours
 }
 
+/*
+*
+* Function Name: pick_nut
+* Input: void
+* Output: int
+* Logic: The function pick the nut after checking if it is a nut
+* Example Call: pick_nut();
+*
+*/
+int pick_nut()
+{
+	align();								// aligns the bot
+	while (ADC_Conversion(4) > 60)			// moves bot to the proximity of the object
+	{
+		forward();
+	}
+	stop();
+	if (filter_color() == red)				// picks red nut
+	{
+		pick();
+		return red;
+	}
+	else if (filter_color() == green)		// picks green nut
+	{
+		pick();
+		return green;
+	}
+	else if (filter_color() == brown)		// does not pick obstacles
+	{
+		return brown;
+	}
+	return clear;							// no object to pick
+}
+
+/*
+*
+* Function Name: place_nut
+* Input: void
+* Output: void
+* Logic: The function place the nut in the location
+* Example Call: place_nut();
+*
+*/
+void place_nut()
+{
+	align();								// aligns the bot
+	place();								// places the nut in the location
+}
 
 /*
 *
 * Function Name: Task_1_1
 * Input: void
 * Output: void
-* Logic: Use this function to encapsulate your Task 1.1 logic
+* Logic: Use this function to encapsulate the Task 1.1 logic
 * Example Call: Task_1_1();
 */
 void Task_1_1(void)
 {
-	line_track();	line_memory = 3; line_memory_rw = 0;
-	R();	line_memory_rw = 1;
-//	forward(); velocity(100, 100);
-//	_delay_ms(600);
-	//	node_cross();
-//	_delay_ms(3000);
-	//	line_track();
-//	_delay_ms(3000);
-//	stop();
-	L();
-	/*		printf("\nNode cross:%d", ir_array());
-			node_cross();
-			printf("\nLeft_turn: %d", ir_array());
-			left_turn_wls();
-			printf("\nLine_Track_main: %d", ir_array());
-			x = 1;
-	//		left_turn_wls();
-	//		line_track();
-			left();
-			_delay_ms(400);
-			line_track(); */
-	L();
-	L();
-	R();
-	F();
-	F();
-	R();
-	L();
-//	L();
-/*	forward(); velocity(100, 100);
-	_delay_ms(400);
-	printf("\n%d", ir_array());
-	left_turn_wls();
-	printf("\n%d", ir_array());
-	forward();
-	_delay_ms(500);
-	line_track();
-	printf("\n%d\n", ir_array()); */  L(); line_memory = 3; line_memory_rw = 0;
-	L();	line_memory_rw = 1;
-	R();
-	stop();
-	_delay_ms(30000);
+	_delay_ms(10);								// Wait for the microcontroller to start running this code
+	line_memory = 3;							// Set left-centre line tracking
+	line_memory_rw = 0;							// Set read-only mode for 'line_memory'
+	line_track();	
+	obstracle_front = 1;						// Reduces distance travelled to align the bot after crossing a node to avoid false tracking of independant line present in vicinity
+	R();										
+	obstracle_front = 0;						// Sets distance travelled to align the bot after crossing a node to default value
+	line_memory_rw = 1;							// Set read-write mode for 'line_memory'
+	L();	L();	L();	R();	F();		
+	line_memory = 3;							// Set left-centre line tracking
+	line_memory_rw = 0;							// Set read-only mode for 'line_memory'
+	F();										
+	line_memory_rw = 1;							// Set read-write mode for 'line_memory'
+	R();	L();	L();						
+	line_memory = 3;							// Set left-centre line tracking
+	line_memory_rw = 0;							// Set read-only mode for 'line_memory'
+	L();										
+	line_memory_rw = 1;							// Set read-write mode for 'line_memory'
+	R();										
+	stop();										
+	_delay_ms(3000);							// Display for 3 secs after completion
 }
 
 /*
@@ -412,5 +621,8 @@ void Task_1_1(void)
 */
 void Task_1_2(void)
 {
-
+	_delay_ms(100);
+	pick_nut();
+	_delay_ms(1000);
+	place_nut();
 }
