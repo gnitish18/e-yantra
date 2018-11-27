@@ -298,7 +298,9 @@ void forward_wls(unsigned char node)
 */
 void left_turn_wls(void)
 {
-	int confidence = 0;									// counter variable for software debounce 				
+	int confidence = 0;									// counter variable for software debounce
+	left();		velocity(150, 150);
+	_delay_ms(120);
 	for (int i = 0; i < confidence_max; i++)			// confirms if left sensor is on black line
 	{
 		if ((ir_array() & 0b100) == 0b100)
@@ -354,6 +356,8 @@ void left_turn_wls(void)
 void right_turn_wls(void)
 {
 	int confidence = 0;									// counter variable for software debounce
+	right();		velocity(150, 150);
+	_delay_ms(120);
 	for (int i = 0; i < confidence_max; i++)			// confirms if right sensor is on black line
 	{
 		if ((ir_array() & 0b001) == 0b001)
