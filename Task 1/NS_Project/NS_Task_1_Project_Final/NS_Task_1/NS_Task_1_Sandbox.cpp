@@ -53,6 +53,12 @@ unsigned char obstracle_front = 0;
 #define confidence_max 20			//max value of confidence in software debouncing
 #define confidence_thresh 14		//threshold for dececion in software debouncing
 
+/* The colours are given specific numerical codes*/
+#define clear 0
+#define red 1
+#define green 2
+#define brown 3
+
 /*
 *
 * Function Name: ir_array
@@ -171,6 +177,59 @@ void line_track(void)
 			for (int i = 0; i < 10; i++)			// Confirms node detection via software debouncing
 			{
 				if (ir_array() == 7)				 
+				{
+					confidence++;
+				}
+				_delay_ms(1);
+			}
+			if (confidence > 5)
+				break;								// breaks from loop (eventually function) after confirmation
+			confidence = 0;
+		}
+		_delay_ms(1);
+	}
+}
+
+
+/********************************************************************************/
+
+/*						This function needs to be edited						*/	
+/*									 Himadri									*/
+
+/********************************************************************************/
+/*
+*
+* Function Name: back_track
+* Input: NONE
+* Output: Follows the black line with either two or three sensors based on 'line_memory' value
+* Logic:
+*	When an obstracle is detected, the bot back-tracks the line without a U-turn.
+*	This is done to avoid miscount of nodes when the blocks are at critical positions.
+*	When tracking with three sensors:
+*		If, centre sensor is on line => it goes straight, left sensor on line => slight right, right sensor on line => slight left
+*		If two consecutive sensors are on the line, correspondingly it goes straight
+*	When tracking with two sensors: (This is done to avoid conflict at certain nodes where the line is thick on one side)
+*		Based on the 'line_memory' value, it tracks using left-centre or right-centre sensors
+*	When it is out of line, then it moves based on the previous movement stored in 'line_track_memory'
+*	When a node is detected (all three sensors are on black) , the control exits the line track function (software debouncing is done here)
+*Example Call: back_track();
+*
+*/
+void back_track(void)
+{
+	int confidence = 0;								// counter variable for software debounce 
+	while (1)
+	{
+		// Type the algorithm here
+
+
+		// Software debouncing
+												// node detected
+		{
+			stop();
+			for (int i = 0; i < 10; i++)			// Confirms node detection via software debouncing
+			{
+				if (ir_array() == 7)
 				{
 					confidence++;
 				}
@@ -404,12 +463,119 @@ void L()
 * Output: void
 * Logic: Use this function to cross a node, then turn right and finally stop at the next node 
 * Example Call: R();
+*
 */
 void R() 
 {
 	forward_wls(1);
 	right_turn_wls();
 	line_track();
+}
+
+/*
+*
+* Function Name: align
+* Input: void
+* Output: void
+* Logic: Use this function to cross a align the bot parallel to the line
+* Example Call: align();
+*
+*/
+void align()
+{
+	while (1)
+	{
+		if (ir_array() == 0b001 || ir_array() == 0b011)
+		{
+			right();	velocity(25, 25);
+		}
+		else if (ir_array() == 0b100 || ir_array() == 0b110)
+		{
+			left();		velocity(25, 25);
+		}
+		if (ir_array() == 0b010)
+		{
+			stop();												//stop and break after aligned
+			break;
+		}
+	}
+	stop();
+}
+
+/*
+*
+* Function Name: filter_color
+* Input: void
+* Output: int
+* Logic: The function filters the colour and returns the corresponding colour code for the colour of the block
+* Example Call: filter_color();
+*
+*/
+int filter_color()
+{
+	int r = 0, g = 0, b = 0;														// variables to store r, g, b values
+	filter_red();
+	r = color_sensor_pulse_count;													// gets r value
+	filter_green();
+	g = color_sensor_pulse_count;													// gets g value
+	filter_blue();
+	b = color_sensor_pulse_count;													// gets b value
+	if (r > 3000 && g < 1000 && b < 1000)
+		return red;																	// determines if red
+	else if (r < 1000 && g>3000 && b < 1500)
+		return green;																// determines if green
+	else if (r > 2000 && r < 4000 && g > 1000 && g < 3000 && b > 500 && b < 2000)
+		return brown;																// determines if brown
+	return clear;																	// determines if none of the above colours
+}
+
+/*
+*
+* Function Name: pick_nut
+* Input: void
+* Output: int
+* Logic: The function pick the nut after checking if it is a nut
+* Example Call: pick_nut();
+*
+*/
+int pick_nut()
+{
+	align();								// aligns the bot
+	while (ADC_Conversion(4) > 60)			// moves bot to the proximity of the object
+	{
+		forward();
+	}
+	stop();
+	if (filter_color() == red)				// picks red nut
+	{
+		pick();
+		return red;
+	}
+	else if (filter_color() == green)		// picks green nut
+	{
+		pick();
+		return green;
+	}
+	else if (filter_color() == brown)		// does not pick obstacles
+	{
+		return brown;
+	}
+	return clear;							// no object to pick
+}
+
+/*
+*
+* Function Name: place_nut
+* Input: void
+* Output: void
+* Logic: The function place the nut in the location
+* Example Call: place_nut();
+*
+*/
+void place_nut()
+{
+	align();								// aligns the bot
+	place();								// places the nut in the location
 }
 
 /*
@@ -455,5 +621,8 @@ void Task_1_1(void)
 */
 void Task_1_2(void)
 {
-
+	_delay_ms(100);
+	pick_nut();
+	_delay_ms(1000);
+	place_nut();
 }
