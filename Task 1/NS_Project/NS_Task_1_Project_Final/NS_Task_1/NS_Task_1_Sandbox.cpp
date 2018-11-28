@@ -636,11 +636,26 @@ int filter_color()
 */
 int pick_nut()
 {
-	align();								// aligns the bot
-	while (ADC_Conversion(4) > 60)			// moves bot to the proximity of the object
+	forward_wls(1);
+	printf("\n\n %d \t %d \t %d\n\n",curr_node,prev_node, maze[curr_node][prev_node][1]);
+	if (maze[curr_node][prev_node][1] == E)
 	{
-		forward();
+		right();	velocity(150, 150);
+		_delay_ms(100);
+		right_turn_wls(1);
 	}
+	else if (maze[curr_node][prev_node][1] == W)
+	{
+		left();		velocity(150, 150);
+		_delay_ms(100);
+		left_turn_wls(1);
+	}
+	align();								// aligns the bot
+	//while (ADC_Conversion(4) > 60)			// moves bot to the proximity of the object
+	//{
+	//	forward();
+	//}
+	_delay_ms(100);
 	stop();
 	if (filter_color() == red)				// picks red nut
 	{
@@ -670,7 +685,14 @@ int pick_nut()
 */
 void place_nut()
 {
-	align();								// aligns the bot
+	forward_wls(1);
+	//printf("\n\n %d \t %d \t %d\n\n", curr_node, prev_node, maze[curr_node][prev_node][1]);
+	if (maze[curr_node][prev_node][1] == W)
+		right_turn_wls(1);
+	else if (maze[curr_node][prev_node][1] == E)
+		left_turn_wls(1);
+	align();
+	stop();								// aligns the bot
 	place();								// places the nut in the location
 	nuts_picked += 1;
 }
@@ -776,7 +798,98 @@ void generate_path(char start_node, char end_node)
 void orient(int apr_dir = -1)
 {
 
+	char sd_complete,sd_else;	//flags for same direction case
+	for (int index = 0; path[index+1] != -1; index++)
+	{
+		curr_node = path[index];
+		if (index)
+			prev_node = path[index - 1];
+		next_node = path[index + 1];
+		printf("\n %d \t %d \t %d", curr_node, prev_node, next_node);
+		// target direction
+		int tar_dir;
+		if (!(apr_dir != -1 && index == 0 ))
+			apr_dir = maze[curr_node][prev_node][1];
+		printf("\t%d", apr_dir);
+		tar_dir = maze[curr_node][next_node][1];
+		if (apr_dir - tar_dir == 1 || apr_dir - tar_dir == -3)
+		{
+			R(1);
+		}
+		else if (apr_dir - tar_dir == -1 || apr_dir - tar_dir == 3)
+		{
+			L(1);
+		}
+		else if (apr_dir - tar_dir == 2 || apr_dir - tar_dir == -2)
+		{
+			F();
+		}
+		else
+		{
+			if (apr_dir == N)
+			{
+				sd_complete = 0; sd_else = 1;
+				for(int j=0;j<24;j++)
+					if (maze[curr_node][j][1] == W) {
+						sd_complete = 1;
+						break;
+					}
+				if (!sd_complete) {
+					R(1); sd_else = 0;
+				}
+				if (sd_complete) {
+					sd_complete = 0;
+					for (int j = 0; j < 24; j++)
+						if (maze[curr_node][j][1] == E) {
+							sd_complete = 1;
+							break;
+						}
+					if (!sd_complete) {
+						L(1); sd_else = 0;
+					}
+				}
+				if (sd_else)
+					R(2);
+			}
+			else if (apr_dir == E)
+			{
 
+			}
+			else if (apr_dir == W)
+			{
+
+			}
+			else
+			{
+				sd_complete = 0; sd_else = 1;
+				printf("\nIN\n");
+				for (int j = 0; j < 24; j++)
+					if (maze[curr_node][j][1] == W) {
+						sd_complete = 1;
+						break;
+					}
+				if (!sd_complete) {
+					L(1); sd_else = 0;
+				}
+				if (sd_complete) {
+					sd_complete = 0;
+					for (int j = 0; j < 24; j++)
+						if (maze[curr_node][j][1] == E) {
+							sd_complete = 1;
+							break;
+						}
+					if (!sd_complete) {
+						R(1); sd_else = 0;
+					}
+				}
+				if (sd_else)
+					L(2);
+				printf("\nOUT\n");
+			}
+		}
+	}
+	prev_node = curr_node;
+	curr_node = next_node;
 }
 
 /*
@@ -822,48 +935,82 @@ void Task_1_1(void)
 */
 void Task_1_2(void)
 {
-	
-	_delay_ms(100);
+	stop();
+	_delay_ms(2000);
+	stop();
+	// switch variable to check if placed
+	int toggle = 0;
+
+	line_track();
+	curr_node = 9;
+	prev_node = 0;
 
 	for (int i = 17; i <= 23; i++)
 	{
+		if (i == 20)
+			continue;
 		generate_path(curr_node, i);
-		orient();
+		if (toggle)
+			orient(N);
+		else
+			orient();
+		toggle = 0;
 		nut_color = pick_nut();
-		if (nut_color = red)
+		printf("\n************ %d ***********\n ", nut_color);
+		if (nut_color == red)
 		{
 			if (!occupied[0])
+			{
 				generate_path(i, 1);
+				occupied[0] = 1;
+			}
 			else
+			{
 				generate_path(i, 4);
-			orient();
+				occupied[1] = 1;
+			}
+			orient(S);
 			place_nut();
+			toggle = 1;
 		}
-		else if (nut_color = green)
+		else if (nut_color == green)
 		{
 			if (!occupied[2])
+			{
 				generate_path(i, 7);
+				occupied[2] = 1;
+			}
 			else
+			{
 				generate_path(i, 2);
-			orient();
+				occupied[3] = 1;
+			}
+			orient(S);
 			place_nut();
+			toggle = 1;
 		}
-		else if (nut_color = clear)
+		else if (nut_color == clear)
 		{
 			if (i == 23)
 				break;
-			generate_path(i, i+1);
-			orient();
+		//	if (i != 19)
+		//		generate_path(i, i + 1);
+		//	else
+		//		generate_path(i, i + 2);
+		//	orient(S);
 		}
 		if (nuts_picked == 4)
 			break;
 	}
 
-
+	generate_path(curr_node, 0);
+	orient(N);
+	left();	velocity(230, 230);
+	_delay_ms(1000);
 	/*pick_nut();
 	_delay_ms(10000);
 	place_nut();*/
-	
+	/*
 	for (int k = 0; k < 24; k++)
 	{
 		for (int l = 0; l < 24; l++)
@@ -873,5 +1020,5 @@ void Task_1_2(void)
 			for (int i = 0; path[i] != -1; i++)
 				printf("%d\t", path[i]);
 		}
-	}
+	}*/
 }
