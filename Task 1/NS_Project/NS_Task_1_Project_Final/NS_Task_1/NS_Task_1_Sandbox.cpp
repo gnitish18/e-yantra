@@ -50,6 +50,48 @@ unsigned char line_track_memory = 0;
 */
 unsigned char obstracle_front = 0;
 
+/*
+*	Variable name: maze
+*	Array that stores complete node details of Task 1.2 track and can be used by Dijikstra`s algorithm for path planning
+*/
+int maze[24][24][2];
+
+/*
+*	Variable name: priority_node
+*	1D array that stores details of the priority_node (node to be branched) to be used in Dijikstra`s algorithm
+*/
+int priority_node[3];
+
+/*
+*	Variable name: priority_queue
+*	Acts as priority queue in Dijikstra`s algorithm and stores details of corresponding nodes
+*/
+int priority_queue[24][3];
+
+/*
+*	Variable name: node_pile
+*	Holds the stack of previous priority nodes and helps in creation of final path
+*/
+int node_pile[24][3];
+
+/*
+*	Variable name: path
+*	Array to store node no.s of final path
+*/
+char path[24];
+
+/*
+*	Variable name: path_dir
+*	Array to store directions for bot to reach end node
+*/
+char path_dir[24];
+
+/*
+*	Variable name: last_node
+*	Stores the previous travelled node number
+*/
+char last_node = 0;
+
 #define confidence_max 20			//max value of confidence in software debouncing
 #define confidence_thresh 14		//threshold for dececion in software debouncing
 
@@ -110,7 +152,7 @@ void line_track(void)
 			{
 				forward(); velocity(250, 125);		// curve right
 			}
-			else				
+			else
 				forward();							// when tracking with all sensors
 		}
 		else if (ir_array() == 0b001)				// only right sensor on black	
@@ -151,7 +193,7 @@ void line_track(void)
 		}
 		else if (ir_array() == 0b101)				// rare case of left-right sensors
 		{
-			if (line_memory == 0)	
+			if (line_memory == 0)
 				soft_left();						//line_memory = 0 => if previous was movement right_turn_wls, right is given priority
 			else if (line_memory == 1)
 				soft_right();						//line_memory = 1 => if previous was movement left_turn_wls, left is given priority
@@ -176,7 +218,7 @@ void line_track(void)
 			stop();
 			for (int i = 0; i < 10; i++)			// Confirms node detection via software debouncing
 			{
-				if (ir_array() == 7)				 
+				if (ir_array() == 7)
 				{
 					confidence++;
 				}
@@ -193,7 +235,7 @@ void line_track(void)
 
 /********************************************************************************/
 
-/*						This function needs to be edited						*/	
+/*						This function needs to be edited						*/
 /*									 Himadri									*/
 
 /********************************************************************************/
@@ -290,115 +332,121 @@ void forward_wls(unsigned char node)
 /*
 *
 * Function Name: left_turn_wls
-* Input: void
+* Input: int
 * Output: void
-* Logic: Uses white line sensors to turn left until black line is encountered
-* Example Call: left_turn_wls(); //Turns left until black line is encountered
+* Logic: Uses white line sensors to turn left until black line is encountered, for specified no. of times as parameter
+* Example Call: left_turn_wls(1); //Turns left once until black line is encountered
 *
 */
-void left_turn_wls(void)
+void left_turn_wls(int count)
 {
-	int confidence = 0;									// counter variable for software debounce
-	left();		velocity(150, 150);
-	_delay_ms(120);
-	for (int i = 0; i < confidence_max; i++)			// confirms if left sensor is on black line
+	while (count-- > 0)
 	{
-		if ((ir_array() & 0b100) == 0b100)
-			confidence++;								
-	}
-	if (confidence > confidence_thresh) 
-	{
+		int confidence = 0;									// counter variable for software debounce
 		left();		velocity(150, 150);
-		while (1)										// if left sensor is on black, turn left until it is out of the black line
-		{
-			confidence = 0;								// resets 'confidence' variable
-			for (int i = 0; i < confidence_max; i++)	// confirms if out of line via software debouncing
-			{
-				if ((ir_array() & 0b100) == 0)
-					confidence++;
-			}
-			if (confidence > confidence_thresh)
-				break;									// confirms and breaks out of the loop
-		}
-	}
-	while (1)
-	{
-		left();											// Turn left until left ir sensor detects a black line
-		if (line_memory == 3)
-			velocity(0, 100);							// soft left at critical left turns (eg. last before node)
-		else 
-			velocity(100, 100);	
-		confidence = 0;
-		for (int i = 0; i < confidence_max; i++)		// confirms if black line is detected by left sensor
+		_delay_ms(120);
+		for (int i = 0; i < confidence_max; i++)			// confirms if left sensor is on black line
 		{
 			if ((ir_array() & 0b100) == 0b100)
 				confidence++;
 		}
-		if (confidence > confidence_thresh)				// confirms and breaks out of the loop
-			break;
+		if (confidence > confidence_thresh)
+		{
+			left();		velocity(150, 150);
+			while (1)										// if left sensor is on black, turn left until it is out of the black line
+			{
+				confidence = 0;								// resets 'confidence' variable
+				for (int i = 0; i < confidence_max; i++)	// confirms if out of line via software debouncing
+				{
+					if ((ir_array() & 0b100) == 0)
+						confidence++;
+				}
+				if (confidence > confidence_thresh)
+					break;									// confirms and breaks out of the loop
+			}
+		}
+		while (1)
+		{
+			left();											// Turn left until left ir sensor detects a black line
+			if (line_memory == 3)
+				velocity(0, 100);							// soft left at critical left turns (eg. last before node)
+			else
+				velocity(100, 100);
+			confidence = 0;
+			for (int i = 0; i < confidence_max; i++)		// confirms if black line is detected by left sensor
+			{
+				if ((ir_array() & 0b100) == 0b100)
+					confidence++;
+			}
+			if (confidence > confidence_thresh)				// confirms and breaks out of the loop
+				break;
+		}
+		_delay_ms(20);
+		stop();
+		_delay_ms(100);										// to stabilize after a turn
+		if (line_memory_rw)
+			line_memory = 0;								//	updates 'line_memory' to set line track preference to left turn at 0b101 case
 	}
-	_delay_ms(20);
-	stop();
-	_delay_ms(100);										// to stabilize after a turn
-	if(line_memory_rw)
-		line_memory = 0;								//	updates 'line_memory' to set line track preference to left turn at 0b101 case
 }
 
 /*
 *
 * Function Name: right_turn_wls
-* Input: void
+* Input: int
 * Output: void
-* Logic: Uses white line sensors to turn right until black line is encountered
-* Example Call: right_turn_wls(); //Turns right until black line is encountered
+* Logic: Uses white line sensors to turn right until black line is encountered, for specified no. of times as parameter
+* Example Call: right_turn_wls(1); //Turns right once until black line is encountered
 *
 */
-void right_turn_wls(void)
+void right_turn_wls(int count)
 {
-	int confidence = 0;									// counter variable for software debounce
-	right();		velocity(150, 150);
-	_delay_ms(120);
-	for (int i = 0; i < confidence_max; i++)			// confirms if right sensor is on black line
+	while (count-- > 0)
 	{
-		if ((ir_array() & 0b001) == 0b001)
-			confidence++;
-	}
-	if (confidence > confidence_thresh) 
-	{
-		right();	
-		while (1)										// if right sensor is on black, turn right until it is out of the black line
+		int confidence = 0;									// counter variable for software debounce
+		right();		velocity(150, 150);
+		_delay_ms(120);
+		for (int i = 0; i < confidence_max; i++)			// confirms if right sensor is on black line
 		{
-			confidence = 0;								// resets 'confidence' variable
-			for (int i = 0; i < confidence_max; i++)	// confirms if out of line via software debouncing
-			{
-				if ((ir_array() & 1) == 0)
-					confidence++;
-			}
-			if (confidence > confidence_thresh)
-				break;									// confirms and breaks out of the loop
-		}
-	}
-	while (1)
-	{
-		right();		velocity(100, 100);				// Turn right until right ir sensor detects a black line
-		if (line_memory == 2)
-			velocity(0, 100);							// soft right at critical right turns
-		else
-			velocity(100, 100);
-		confidence = 0;
-		for (int i = 0; i < confidence_max; i++)		// confirms if black line is detected by right sensor
-		{
-			if ((ir_array() & 1) == 1)
+			if ((ir_array() & 0b001) == 0b001)
 				confidence++;
 		}
-		if (confidence > confidence_thresh)				// confirms and breaks out of the loop
-			break;
+		if (confidence > confidence_thresh)
+		{
+			right();
+			while (1)										// if right sensor is on black, turn right until it is out of the black line
+			{
+				confidence = 0;								// resets 'confidence' variable
+				for (int i = 0; i < confidence_max; i++)	// confirms if out of line via software debouncing
+				{
+					if ((ir_array() & 1) == 0)
+						confidence++;
+				}
+				if (confidence > confidence_thresh)
+					break;									// confirms and breaks out of the loop
+			}
+		}
+		while (1)
+		{
+			right();		velocity(100, 100);				// Turn right until right ir sensor detects a black line
+			if (line_memory == 2)
+				velocity(0, 100);							// soft right at critical right turns
+			else
+				velocity(100, 100);
+			confidence = 0;
+			for (int i = 0; i < confidence_max; i++)		// confirms if black line is detected by right sensor
+			{
+				if ((ir_array() & 1) == 1)
+					confidence++;
+			}
+			if (confidence > confidence_thresh)				// confirms and breaks out of the loop
+				break;
+		}
+		_delay_ms(20);
+		stop();
+		_delay_ms(100);										// to stabilize after a turn
+		if (line_memory_rw)
+			line_memory = 1;								//	updates 'line_memory' to set line track preference to right turn at 0b101 case
 	}
-	_delay_ms(20);
-	stop();
-	_delay_ms(100);										// to stabilize after a turn
-	if(line_memory_rw)
-		line_memory = 1;								//	updates 'line_memory' to set line track preference to right turn at 0b101 case
 }
 
 /*
@@ -438,7 +486,7 @@ void Square(void)
 * Example Call: F();
 *
 */
-void F() 
+void F()
 {
 	forward_wls(1);
 	line_track();
@@ -449,30 +497,30 @@ void F()
 * Function Name: L
 * Input: void
 * Output: void
-* Logic: Use this function to cross a node, then turn left and finally stop at the next node 
+* Logic: Use this function to cross a node, then turns left for specified no. of times and finally stop at the next node
 * Example Call: L();
 *
 */
-void L() 
+void L(int count)
 {
 	forward_wls(1);
-	left_turn_wls();
+	left_turn_wls(count);
 	line_track();
 }
 
 /*
 *
 * Function Name: R
-* Input: void
+* Input: int
 * Output: void
-* Logic: Use this function to cross a node, then turn right and finally stop at the next node 
+* Logic: Use this function to cross a node, then turns right for specified no. of times and finally stop at the next node
 * Example Call: R();
 *
 */
-void R() 
+void R(int count)
 {
 	forward_wls(1);
-	right_turn_wls();
+	right_turn_wls(count);
 	line_track();
 }
 
@@ -583,6 +631,84 @@ void place_nut()
 }
 
 /*
+* Function Name: generate_path
+* Input: char,char
+* Output: void
+* Logic: Generates the shortest/fastest path using Djikstra`s algorithm between the inputed start and end nodes and stores nodes in path[] & path directions in path_dir[]
+* Example Call: generate_path(7,19);
+*/
+void generate_path(char start_node, char end_node)
+{
+	int i_pq = 0, swap_pq[3], pq_node_repeat, i_np = 0, i_path = 1, swap_path;
+	do {
+		//priority_node = start_node
+		priority_node[0] = start_node;	priority_node[1] = last_node;	priority_node[2] = 0;
+
+		//Creating/adding to priority_queue
+		for (int i = 0; i < 24; i++)
+		{
+			if (maze[priority_node[0]][i][0] != -1) {
+				pq_node_repeat = 0;
+				for (int j = 0; j < i_pq; j++)
+					if (priority_queue[j][0] == i) {
+						pq_node_repeat = 1;
+						if (priority_node[2] + maze[priority_node[0]][i][0] < priority_queue[j][2]) {
+							priority_queue[j][2] = priority_node[2] + maze[priority_node[0]][i][0];
+							priority_queue[j][1] = priority_node[0];
+						}
+						break;
+					}
+				if (pq_node_repeat == 0) {
+					priority_queue[i_pq][0] = i;	priority_queue[i_pq][1] = priority_node[0];		priority_queue[i_pq][2] = priority_node[2] + maze[priority_node[0]][i][0];
+					i_pq += 1;
+				}
+			}
+		}
+		priority_queue[i_pq][0] = -1;
+
+		//Sorting priority_queue
+		for (int i = 0; i < i_pq; i++) {
+			for (int j = i + 1; j < i_pq; j++) {
+				if (priority_queue[j][2] < priority_queue[i][2]) {
+					for (int k = 0; k < 3; k++) {
+						swap_pq[k] = priority_queue[i][k];
+						priority_queue[i][k] = priority_queue[j][k];
+						priority_queue[j][k] = swap_pq[k];
+					}
+				}
+			}
+		}
+
+		//Add priority_node to node_pile
+		for (int i = 0; i < 3; i++)
+			node_pile[i_np][i] = priority_node[i];
+		i_np += 1;
+
+		//Update priority_node
+		for (int i = 0; i < 3; i++)
+			priority_node[i] = priority_queue[0][i];
+	} while (priority_node[0] != end_node);		//Djikstra`s Algorithm stops only when the end node reaches the top of the priority queue
+
+	//Cration of path matrix by backtracking
+	path[0] = end_node;
+	path[1] = priority_queue[0][1];
+	while (1)
+	{
+		if (node_pile[--i_np][0] == path[i_path])
+		{
+			path[++i_path] = node_pile[i_np][1];
+			if (path[i_path] == start_node)
+				break;
+		}
+	}
+	for (int i = 0; i <= i_path / 2; i++) {
+		swap_path = path[i];
+		path[i] = path[i_path - i];
+		path[i_path - i] = path[i];
+	}
+}
+
+/*
 *
 * Function Name: Task_1_1
 * Input: void
@@ -595,23 +721,23 @@ void Task_1_1(void)
 	_delay_ms(10);								// Wait for the microcontroller to start running this code
 	line_memory = 3;							// Set left-centre line tracking
 	line_memory_rw = 0;							// Set read-only mode for 'line_memory'
-	line_track();	
+	line_track();
 	obstracle_front = 1;						// Reduces distance travelled to align the bot after crossing a node to avoid false tracking of independant line present in vicinity
-	R();										
+	R(1);
 	obstracle_front = 0;						// Sets distance travelled to align the bot after crossing a node to default value
 	line_memory_rw = 1;							// Set read-write mode for 'line_memory'
-	L();	L();	L();	R();	F();		
+	L(1);	L(1);	L(1);	R(1);	F();
 	line_memory = 3;							// Set left-centre line tracking
 	line_memory_rw = 0;							// Set read-only mode for 'line_memory'
-	F();										
+	F();
 	line_memory_rw = 1;							// Set read-write mode for 'line_memory'
-	R();	L();	L();						
+	R(1);	L(1);	L(1);
 	line_memory = 3;							// Set left-centre line tracking
 	line_memory_rw = 0;							// Set read-only mode for 'line_memory'
-	L();										
+	L(1);
 	line_memory_rw = 1;							// Set read-write mode for 'line_memory'
-	R();										
-	stop();										
+	R(1);
+	stop();
 	_delay_ms(3000);							// Display for 3 secs after completion
 }
 
