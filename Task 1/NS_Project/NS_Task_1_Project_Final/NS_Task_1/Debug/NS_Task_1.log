@@ -1,12 +1,2 @@
-﻿  NS_Task_1.cpp
-  NS_Task_1_Predef.cpp
-  NS_Task_1_Sandbox.cpp
-  Generating Code...
-  extApi.c
-  extApiPlatform.c
-  Adding library: Winmm.lib
-  Adding library: Ws2_32.lib
-  Generating Code...
-  LINK : C:\Users\Deepak\Documents\GitHub\e-yantra\Task 1\NS_Project\NS_Task_1_Project_Final\Debug\NS_Task_1.exe not found or not built by the last incremental link; performing full link
-     Creating library C:\Users\Deepak\Documents\GitHub\e-yantra\Task 1\NS_Project\NS_Task_1_Project_Final\Debug\NS_Task_1.lib and object C:\Users\Deepak\Documents\GitHub\e-yantra\Task 1\NS_Project\NS_Task_1_Project_Final\Debug\NS_Task_1.exp
-  NS_Task_1.vcxproj -> C:\Users\Deepak\Documents\GitHub\e-yantra\Task 1\NS_Project\NS_Task_1_Project_Final\Debug\NS_Task_1.exe
+﻿  NS_Task_1_Sandbox.cpp
+  NS_Task_1.vcxproj -> C:\Users\HP\Documents\GitHub\e-yantra\Task 1\NS_Project\NS_Task_1_Project_Final\Debug\NS_Task_1.exe

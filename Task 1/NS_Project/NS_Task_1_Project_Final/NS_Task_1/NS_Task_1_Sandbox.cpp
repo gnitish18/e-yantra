@@ -658,19 +658,19 @@ void place_nut()
 * Input: char,char
 * Output: void
 * Logic: Generates the shortest/fastest path using Djikstra`s algorithm between the inputed start and end nodes and stores nodes in path[] & path directions in path_dir[]
-* Example Call: generate_path(7,19);
+* Example Call: generate_path(2,13);
 */
 void generate_path(char start_node, char end_node)
 {
 	int i_pq = 0, swap_pq[3], pq_node_repeat, i_np = 0, i_path = 1, swap_path;
+	
+	//priority_node = start_node
+	priority_node[0] = start_node;	priority_node[1] = last_node;	priority_node[2] = 0;
 	do {
-		//priority_node = start_node
-		priority_node[0] = start_node;	priority_node[1] = last_node;	priority_node[2] = 0;
-
 		//Creating/adding to priority_queue
 		for (int i = 0; i < 24; i++)
 		{
-			if (maze[priority_node[0]][i][0] != -1) {
+			if (maze[priority_node[0]][i][0] != -1 && i != priority_node[1]) {
 				pq_node_repeat = 0;
 				for (int j = 0; j < i_pq; j++)
 					if (priority_queue[j][0] == i) {
@@ -679,6 +679,11 @@ void generate_path(char start_node, char end_node)
 							priority_queue[j][2] = priority_node[2] + maze[priority_node[0]][i][0];
 							priority_queue[j][1] = priority_node[0];
 						}
+						break;
+					}
+				for (int j = 0; j < i_np; j++)
+					if (node_pile[j][0] == i) {
+						pq_node_repeat = 1;
 						break;
 					}
 				if (pq_node_repeat == 0) {
@@ -702,6 +707,7 @@ void generate_path(char start_node, char end_node)
 			}
 		}
 
+		
 		//Add priority_node to node_pile
 		for (int i = 0; i < 3; i++)
 			node_pile[i_np][i] = priority_node[i];
@@ -710,13 +716,20 @@ void generate_path(char start_node, char end_node)
 		//Update priority_node
 		for (int i = 0; i < 3; i++)
 			priority_node[i] = priority_queue[0][i];
+		//Move priority_queue by 1 step
+		for (int i = 1; i < 24 && priority_queue[i][0] != -1; i++)
+			for (int k = 0; k < 3; k++)
+				priority_queue[i - 1][k] = priority_queue[i][k];
+		priority_queue[--i_pq][0] = -1;
 	} while (priority_node[0] != end_node);		//Djikstra`s Algorithm stops only when the end node reaches the top of the priority queue
 
 	//Cration of path matrix by backtracking
 	path[0] = end_node;
-	path[1] = priority_queue[0][1];
+	path[1] = priority_node[1];
 	while (1)
 	{
+		if (path[1] == start_node)
+			break;
 		if (node_pile[--i_np][0] == path[i_path])
 		{
 			path[++i_path] = node_pile[i_np][1];
@@ -724,11 +737,14 @@ void generate_path(char start_node, char end_node)
 				break;
 		}
 	}
+	
+	//Reversing path matrix to ascending order of path
 	for (int i = 0; i <= i_path / 2; i++) {
 		swap_path = path[i];
 		path[i] = path[i_path - i];
-		path[i_path - i] = path[i];
+		path[i_path - i] = swap_path;
 	}
+	path[i_path + 1] = -1;
 }
 
 /*
@@ -776,6 +792,6 @@ void Task_1_2(void)
 {
 	_delay_ms(100);
 	pick_nut();
-	_delay_ms(1000);
+	_delay_ms(10000);
 	place_nut();
 }
