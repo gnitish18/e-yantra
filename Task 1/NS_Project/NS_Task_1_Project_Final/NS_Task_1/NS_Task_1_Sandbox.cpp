@@ -667,6 +667,11 @@ void generate_path(char start_node, char end_node)
 	//priority_node = start_node
 	priority_node[0] = start_node;	priority_node[1] = last_node;	priority_node[2] = 0;
 	do {
+		//Dead End Cases elimination
+		if ((start_node == 9 && end_node == 0) || start_node == end_node) {
+			priority_node[1] = start_node;
+			break;
+		}
 		//Creating/adding to priority_queue
 		for (int i = 0; i < 24; i++)
 		{
@@ -790,8 +795,23 @@ void Task_1_1(void)
 */
 void Task_1_2(void)
 {
+	int i = 0;
+	
 	_delay_ms(100);
 	pick_nut();
 	_delay_ms(10000);
 	place_nut();
+	
+	/*for (int k = 0; k < 24; k++)
+	{
+		for (int l = 0; l < 24; l++)
+		{
+			generate_path(k, l);
+			printf("\n");
+			i = 0;
+			while (path[i] != -1)
+				printf("%d\t", path[i++]);
+		}
+	}*/
+		
 }
