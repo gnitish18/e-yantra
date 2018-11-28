@@ -116,10 +116,31 @@ char path[24];
 char path_dir[24];
 
 /*
-*	Variable name: last_node
+*	Variable name: prev_node
 *	Stores the previous travelled node number
 */
-char last_node = 0;
+char prev_node = 0;
+
+/*
+*	Variable name: curr_node
+*	Stores the current node number
+*/
+char curr_node = 0;
+
+/*
+*	Variable name: next_node
+*	Stores the next node number to be travelled
+*/
+char next_node = 0;
+
+// colour of the nut picked
+int nut_color;
+
+// number of nuts picked
+int nuts_picked = 0;
+
+// tell the occupancy status of the drop locations
+unsigned char occupied[4] = { 0,0,0,0 };
 
 #define confidence_max 20			//max value of confidence in software debouncing
 #define confidence_thresh 14		//threshold for dececion in software debouncing
@@ -651,6 +672,7 @@ void place_nut()
 {
 	align();								// aligns the bot
 	place();								// places the nut in the location
+	nuts_picked += 1;
 }
 
 /*
@@ -665,7 +687,7 @@ void generate_path(char start_node, char end_node)
 	int i_pq = 0, swap_pq[3], pq_node_repeat, i_np = 0, i_path = 1, swap_path;
 	
 	//priority_node = start_node
-	priority_node[0] = start_node;	priority_node[1] = last_node;	priority_node[2] = 0;
+	priority_node[0] = start_node;	priority_node[1] = 0;	priority_node[2] = 0;
 	do {
 		//Dead End Cases elimination
 		if ((start_node == 9 && end_node == 0) || start_node == end_node) {
@@ -712,7 +734,6 @@ void generate_path(char start_node, char end_node)
 			}
 		}
 
-		
 		//Add priority_node to node_pile
 		for (int i = 0; i < 3; i++)
 			node_pile[i_np][i] = priority_node[i];
@@ -750,6 +771,12 @@ void generate_path(char start_node, char end_node)
 		path[i_path - i] = swap_path;
 	}
 	path[i_path + 1] = -1;
+}
+
+void orient(int apr_dir = -1)
+{
+
+
 }
 
 /*
@@ -795,23 +822,56 @@ void Task_1_1(void)
 */
 void Task_1_2(void)
 {
-	int i = 0;
 	
 	_delay_ms(100);
-	pick_nut();
+
+	for (int i = 17; i <= 23; i++)
+	{
+		generate_path(curr_node, i);
+		orient();
+		nut_color = pick_nut();
+		if (nut_color = red)
+		{
+			if (!occupied[0])
+				generate_path(i, 1);
+			else
+				generate_path(i, 4);
+			orient();
+			place_nut();
+		}
+		else if (nut_color = green)
+		{
+			if (!occupied[2])
+				generate_path(i, 7);
+			else
+				generate_path(i, 2);
+			orient();
+			place_nut();
+		}
+		else if (nut_color = clear)
+		{
+			if (i == 23)
+				break;
+			generate_path(i, i+1);
+			orient();
+		}
+		if (nuts_picked == 4)
+			break;
+	}
+
+
+	/*pick_nut();
 	_delay_ms(10000);
-	place_nut();
+	place_nut();*/
 	
-	/*for (int k = 0; k < 24; k++)
+	for (int k = 0; k < 24; k++)
 	{
 		for (int l = 0; l < 24; l++)
 		{
 			generate_path(k, l);
 			printf("\n");
-			i = 0;
-			while (path[i] != -1)
-				printf("%d\t", path[i++]);
+			for (int i = 0; path[i] != -1; i++)
+				printf("%d\t", path[i]);
 		}
-	}*/
-		
+	}
 }
