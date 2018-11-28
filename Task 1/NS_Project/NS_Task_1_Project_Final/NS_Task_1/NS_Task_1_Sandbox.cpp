@@ -793,11 +793,16 @@ void generate_path(char start_node, char end_node)
 		path[i_path - i] = swap_path;
 	}
 	path[i_path + 1] = -1;
+
+	if (path[0] == path[1])
+	{
+		path[1] = -1;
+	}
 }
 
-void orient(int apr_dir = -1)
+void orient(int apr_dir)
 {
-
+	printf("\n###########################apr_dir=%d#####################\n", apr_dir);
 	char sd_complete,sd_else;	//flags for same direction case
 	for (int index = 0; path[index+1] != -1; index++)
 	{
@@ -888,8 +893,11 @@ void orient(int apr_dir = -1)
 			}
 		}
 	}
-	prev_node = curr_node;
-	curr_node = next_node;
+	if (path[1] != -1)
+	{
+		prev_node = curr_node;
+		curr_node = next_node;
+	}
 }
 
 /*
@@ -950,10 +958,10 @@ void Task_1_2(void)
 		if (i == 20)
 			continue;
 		generate_path(curr_node, i);
-		if (toggle)
-			orient(N);
+		if (!toggle)
+			orient(-1);
 		else
-			orient();
+			orient(N);
 		toggle = 0;
 		nut_color = pick_nut();
 		printf("\n************ %d ***********\n ", nut_color);
@@ -994,10 +1002,10 @@ void Task_1_2(void)
 			if (i == 23)
 				break;
 		//	if (i != 19)
-		//		generate_path(i, i + 1);
+				generate_path(i, i + 1);
 		//	else
 		//		generate_path(i, i + 2);
-		//	orient(S);
+			orient(S);
 		}
 		if (nuts_picked == 4)
 			break;
