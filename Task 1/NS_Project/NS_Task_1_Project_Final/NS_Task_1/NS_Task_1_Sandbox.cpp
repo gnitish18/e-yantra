@@ -50,6 +50,9 @@ unsigned char line_track_memory = 0;
 */
 unsigned char obstracle_front = 0;
 
+//	Counts the number of iterations in line_track();
+float iteration = 0;
+
 //	Initializing default values for North, East, South, West
 enum direction { N, E, S, W };
 /*
@@ -133,6 +136,13 @@ char curr_node = 0;
 */
 char next_node = 0;
 
+//Stores the destination node of current path
+char target_node = 0;
+
+//Variables of communication between obstracle() and orient function() to signify node detection and bot facing direction (0 - no change , 1 - 180 deg turn)
+char obstruction = 0 , obs_new_dir = 0;
+
+
 // colour of the nut picked
 int nut_color;
 
@@ -150,6 +160,24 @@ unsigned char occupied[4] = { 0,0,0,0 };
 #define red 1
 #define green 2
 #define brown 3
+
+unsigned char ir_array(void);
+void obstracle(int);
+void line_track(void);
+void forward_wls(unsigned char);
+void left_turn_wls(int);
+void right_turn_wls(int);
+void Square(void);
+void F();
+void L(int);
+void R(int);
+int filter_color();
+int pick_nut();
+void place_nut();
+void generate_path(char, char);
+void orient(int);
+void Task_1_1(void);
+void Task_1_2(void);
 
 /*
 *
@@ -170,6 +198,36 @@ unsigned char ir_array(void)
 	return ((left_sensor > 180) * 4 + (centre_sensor > 180) * 2 + (right_sensor > 180));	//converting adc values into a single decimal number based on the binary value
 }
 
+void obstracle(int condition)
+{
+	stop();
+	obstruction = 1;
+	if (!condition)
+	{
+		L(1);
+		_delay_ms(100);
+		obs_new_dir = 1;
+	//	exit(0);
+	}
+	else if (condition == 2)
+	{
+		_delay_ms(100);
+		obs_new_dir = 0;
+	//	exit(0);
+	}
+	else
+	{	
+		back();		velocity(250, 250);
+		printf("\n1 Iteration %f", iteration);
+		_delay_ms((iteration*15)/2);
+		printf("\n2 Iteration %f", iteration);
+		stop();
+		_delay_ms(100);
+		obs_new_dir = 0;
+	//	exit(0);
+	}
+}
+
 /*
 *
 * Function Name: line_track
@@ -188,31 +246,80 @@ unsigned char ir_array(void)
 */
 void line_track(void)
 {
-	int confidence = 0;								// counter variable for software debounce 
+	int confidence = 0, obs_confidence = 0;		// counter variable for software debounce 
+	iteration = 0;					//counts number of iterations
+	int ir_local = -1;		// local variable for ir_array()
 	while (1)
 	{
+		if (ADC_Conversion(4) < 60)
+		{
+			stop();
+			obs_confidence = 0;
+			for (int i = 0; i < 10; i++)			// Confirms node detection via software debouncing
+			{
+				if (ADC_Conversion(4) < 90)
+				{
+					obs_confidence++;
+				}
+				_delay_ms(1);
+			}
+			if (obs_confidence > 5)
+			{
+				printf("\n ADC Conversion %d", ADC_Conversion(4));
+				printf("\nObstracle\n");
+				if (iteration > 120)
+				{
+					printf("Itertion = %f; Case 0", iteration);
+					obstracle(0);
+					break;
+				}
+				else if (iteration < 10)
+				{
+					printf("Iteration = %f; Case 2", iteration);
+					obstracle(2);
+					break;
+				}
+				else
+				{
+					printf("Iteration = %f; Case 1", iteration);
+					obstracle(1);
+					break;
+				}
+			}
+		}
+		_delay_ms(1);
+		ir_local = ir_array();
 		velocity(250, 250);
-		if (ir_array() == 0b010)					// only centre sensor on black line
+		if (ir_local == 0b010)					// only centre sensor on black line
 		{
 			if (line_memory == 2)					// line track with right-centre sensors 
 			{
 				forward(); velocity(125, 250);		// curve left
+				iteration += 0.75;
 			}
 			else if (line_memory == 3)				// line track with left-centre sensors
 			{
 				forward(); velocity(250, 125);		// curve right
+				iteration += 0.75;
 			}
 			else
+			{
 				forward();							// when tracking with all sensors
+				iteration += 1;
+			}
 		}
-		else if (ir_array() == 0b001)				// only right sensor on black	
+		else if (ir_local == 0b001)				// only right sensor on black	
 		{
 			if (line_memory == 2)					// line track with right-centre sensors 
 			{
 				forward(); velocity(250, 125);		// curve right
+				iteration += 0.75;
 			}
 			else
+			{
 				soft_right();
+				iteration += 0.5;
+			}
 			line_track_memory = 1;					// store the movement 
 		}
 		else if (ir_array() == 0b100)				// only left sensor on black	
@@ -220,33 +327,55 @@ void line_track(void)
 			if (line_memory == 3)					// line track with left-centre sensors
 			{
 				forward(); velocity(125, 250);		// curve left
+				iteration += 0.75;
 			}
 			else
+			{
 				soft_left();
+				iteration += 0.5;
+			}
 			line_track_memory = 0;					// store the movement 
 		}
-		else if (ir_array() == 0b011)				// right-centre sensor on black	
+		else if (ir_local == 0b011)				// right-centre sensor on black	
 		{
 			if (line_memory == 3)					// line track with left-centre sensors
+			{
 				soft_right();
+				iteration += 0.5;
+			}
 			else
+			{
 				forward();
+				iteration += 1;
+			}
 			line_track_memory = 1;					// store the movement 
 		}
-		else if (ir_array() == 0b110)				// left-centre sensor on black	
+		else if (ir_local == 0b110)				// left-centre sensor on black	
 		{
 			if (line_memory == 2)					// line track with right-centre sensors 
+			{
 				soft_left();
+				iteration += 0.5;
+			}
 			else
+			{
 				forward();
+				iteration += 1;
+			}
 			line_track_memory = 0;					// store the movement 
 		}
-		else if (ir_array() == 0b101)				// rare case of left-right sensors
+		else if (ir_local == 0b101)				// rare case of left-right sensors
 		{
 			if (line_memory == 0)
-				soft_left();						//line_memory = 0 => if previous was movement right_turn_wls, right is given priority
+			{
+				soft_left();					//line_memory = 0 => if previous was movement right_turn_wls, right is given priority
+				iteration += 0.5;
+			}
 			else if (line_memory == 1)
+			{
 				soft_right();						//line_memory = 1 => if previous was movement left_turn_wls, left is given priority
+				iteration += 0.5;
+			}
 			else if (line_memory == 2)				// line track with right-centre sensors 
 			{
 				left();
@@ -256,61 +385,20 @@ void line_track(void)
 				right();
 			}
 		}
-		else if (ir_array() == 0)					// out of line
+		else if (ir_local == 0)					// out of line
 		{
 			if (line_track_memory == 0)
+			{
 				soft_left();
+				iteration += 0.5;
+			}
 			else if (line_track_memory == 1)
+			{
 				soft_right();
+				iteration += 0.5;
+			}
 		}
 		else										// node detected
-		{
-			stop();
-			for (int i = 0; i < 10; i++)			// Confirms node detection via software debouncing
-			{
-				if (ir_array() == 7)
-				{
-					confidence++;
-				}
-				_delay_ms(1);
-			}
-			if (confidence > 5)
-				break;								// breaks from loop (eventually function) after confirmation
-			confidence = 0;
-		}
-		_delay_ms(1);
-	}
-}
-
-
-/*
-*
-* Function Name: back_track
-* Input: NONE
-* Output: Follows the black line with either two or three sensors based on 'line_memory' value
-* Logic:
-*	When an obstracle is detected, the bot back-tracks the line without a U-turn.
-*	This is done to avoid miscount of nodes when the blocks are at critical positions.
-*	When tracking with three sensors:
-*		If, centre sensor is on line => it goes straight, left sensor on line => slight right, right sensor on line => slight left
-*		If two consecutive sensors are on the line, correspondingly it goes straight
-*	When tracking with two sensors: (This is done to avoid conflict at certain nodes where the line is thick on one side)
-*		Based on the 'line_memory' value, it tracks using left-centre or right-centre sensors
-*	When it is out of line, then it moves based on the previous movement stored in 'line_track_memory'
-*	When a node is detected (all three sensors are on black) , the control exits the line track function (software debouncing is done here)
-*Example Call: back_track();
-*
-*/
-void back_track(void)
-{
-	int confidence = 0;								// counter variable for software debounce 
-	while (1)
-	{
-		// Type the algorithm here
-
-
-		// Software debouncing
-												// node detected
 		{
 			stop();
 			for (int i = 0; i < 10; i++)			// Confirms node detection via software debouncing
@@ -604,11 +692,6 @@ int pick_nut()
 		_delay_ms(100);
 		left_turn_wls(1);
 	}
-	//align();								// aligns the bot
-	//while (ADC_Conversion(4) > 60)			// moves bot to the proximity of the object
-	//{
-	//	forward();
-	//}
 	_delay_ms(100);
 	stop();
 
@@ -663,13 +746,11 @@ int pick_nut()
 void place_nut()
 {
 	forward_wls(1);
-	//printf("\n\n %d \t %d \t %d\n\n", curr_node, prev_node, maze[curr_node][prev_node][1]);
 	if (maze[curr_node][prev_node][1] == W)
 		right_turn_wls(1);
 	else if (maze[curr_node][prev_node][1] == E)
 		left_turn_wls(1);
-	//align();
-	stop();								// aligns the bot
+	stop();								
 	place();								// places the nut in the location
 	nuts_picked += 1;
 }
@@ -684,7 +765,7 @@ void place_nut()
 void generate_path(char start_node, char end_node)
 {
 	int i_pq = 0, swap_pq[3], pq_node_repeat, i_np = 0, i_path = 1, swap_path;
-	
+	target_node = end_node;
 	//priority_node = start_node
 	priority_node[0] = start_node;	priority_node[1] = 0;	priority_node[2] = 0;
 	do {
@@ -777,99 +858,164 @@ void generate_path(char start_node, char end_node)
 	}
 }
 
+/*
+*	
+*
+*/
 void orient(int apr_dir)
 {
-	printf("\n###########################apr_dir=%d#####################\n", apr_dir);
-	char sd_complete,sd_else;	//flags for same direction case
-	for (int index = 0; path[index+1] != -1; index++)
+	do
 	{
-		curr_node = path[index];
-		if (index)
-			prev_node = path[index - 1];
-		next_node = path[index + 1];
-		printf("\n %d \t %d \t %d", curr_node, prev_node, next_node);
-		// target direction
-		int tar_dir;
-		if (!(apr_dir != -1 && index == 0 ))
-			apr_dir = maze[curr_node][prev_node][1];
-		printf("\t%d", apr_dir);
-		tar_dir = maze[curr_node][next_node][1];
-		if (apr_dir - tar_dir == 1 || apr_dir - tar_dir == -3)
+		obstruction = 0;
+		printf("\n###########################apr_dir=%d#####################\n", apr_dir);
+		char sd_complete, sd_else;	//flags for same direction case
+		for (int index = 0; path[index + 1] != -1; index++)
 		{
-			R(1);
-		}
-		else if (apr_dir - tar_dir == -1 || apr_dir - tar_dir == 3)
-		{
-			L(1);
-		}
-		else if (apr_dir - tar_dir == 2 || apr_dir - tar_dir == -2)
-		{
-			F();
-		}
-		else
-		{
-			if (apr_dir == N)
+			curr_node = path[index];
+			if (index)
+				prev_node = path[index - 1];
+			next_node = path[index + 1];
+			printf("\n %d \t %d \t %d", curr_node, prev_node, next_node);
+			// target direction
+			int tar_dir;
+			if (!(apr_dir != -1 && index == 0))
+				apr_dir = maze[curr_node][prev_node][1];
+			printf("\t%d", apr_dir);
+			tar_dir = maze[curr_node][next_node][1];
+			if (apr_dir - tar_dir == 1 || apr_dir - tar_dir == -3)
 			{
-				sd_complete = 0; sd_else = 1;
-				for(int j=0;j<24;j++)
-					if (maze[curr_node][j][1] == W) {
-						sd_complete = 1;
-						break;
-					}
-				if (!sd_complete) {
-					R(1); sd_else = 0;
-				}
-				if (sd_complete) {
-					sd_complete = 0;
-					for (int j = 0; j < 24; j++)
-						if (maze[curr_node][j][1] == E) {
-							sd_complete = 1;
-							break;
-						}
-					if (!sd_complete) {
-						L(1); sd_else = 0;
-					}
-				}
-				if (sd_else)
-					R(2);
+				R(1);
 			}
-			else if (apr_dir == E)
+			else if (apr_dir - tar_dir == -1 || apr_dir - tar_dir == 3)
 			{
-
+				L(1);
 			}
-			else if (apr_dir == W)
+			else if (apr_dir - tar_dir == 2 || apr_dir - tar_dir == -2)
 			{
-
+				F();
 			}
 			else
 			{
-				sd_complete = 0; sd_else = 1;
-				printf("\nIN\n");
-				for (int j = 0; j < 24; j++)
-					if (maze[curr_node][j][1] == W) {
-						sd_complete = 1;
-						break;
-					}
-				if (!sd_complete) {
-					L(1); sd_else = 0;
-				}
-				if (sd_complete) {
-					sd_complete = 0;
+				if (apr_dir == N)
+				{
+					sd_complete = 0; sd_else = 1;
 					for (int j = 0; j < 24; j++)
-						if (maze[curr_node][j][1] == E) {
+						if (maze[curr_node][j][1] == W) {
 							sd_complete = 1;
 							break;
 						}
 					if (!sd_complete) {
 						R(1); sd_else = 0;
 					}
+					if (sd_complete) {
+						sd_complete = 0;
+						for (int j = 0; j < 24; j++)
+							if (maze[curr_node][j][1] == E) {
+								sd_complete = 1;
+								break;
+							}
+						if (!sd_complete) {
+							L(1); sd_else = 0;
+						}
+					}
+					if (sd_else)
+						R(2);
 				}
-				if (sd_else)
-					L(2);
-				printf("\nOUT\n");
+				else if (apr_dir == E)
+				{
+					sd_complete = 0; sd_else = 1;
+					for (int j = 0; j < 24; j++)
+						if (maze[curr_node][j][1] == N) {
+							sd_complete = 1;
+							break;
+						}
+					if (!sd_complete) {
+						R(1); sd_else = 0;
+					}
+					if (sd_complete) {
+						sd_complete = 0;
+						for (int j = 0; j < 24; j++)
+							if (maze[curr_node][j][1] == S) {
+								sd_complete = 1;
+								break;
+							}
+						if (!sd_complete) {
+							L(1); sd_else = 0;
+						}
+					}
+					if (sd_else)
+						R(2);
+				}
+				else if (apr_dir == W)
+				{
+					sd_complete = 0; sd_else = 1;
+					for (int j = 0; j < 24; j++)
+						if (maze[curr_node][j][1] == N) {
+							sd_complete = 1;
+							break;
+						}
+					if (!sd_complete) {
+						L(1); sd_else = 0;
+					}
+					if (sd_complete) {
+						sd_complete = 0;
+						for (int j = 0; j < 24; j++)
+							if (maze[curr_node][j][1] == S) {
+								sd_complete = 1;
+								break;
+							}
+						if (!sd_complete) {
+							R(1); sd_else = 0;
+						}
+					}
+					if (sd_else)
+						L(2);
+				}
+				else
+				{
+					sd_complete = 0; sd_else = 1;
+					printf("\nIN\n");
+					for (int j = 0; j < 24; j++)
+						if (maze[curr_node][j][1] == W) {
+							sd_complete = 1;
+							break;
+						}
+					if (!sd_complete) {
+						L(1); sd_else = 0;
+					}
+					if (sd_complete) {
+						sd_complete = 0;
+						for (int j = 0; j < 24; j++)
+							if (maze[curr_node][j][1] == E) {
+								sd_complete = 1;
+								break;
+							}
+						if (!sd_complete) {
+							R(1); sd_else = 0;
+						}
+					}
+					if (sd_else)
+						L(2);
+					printf("\nOUT\n");
+				}
+			}
+			if (obstruction)
+			{
+				maze[curr_node][next_node][0] = -1;	maze[curr_node][next_node][1] = -1;
+				maze[next_node][curr_node][0] = -1;	maze[next_node][curr_node][1] = -1;
+				generate_path(curr_node, target_node);
+				if (obs_new_dir) {
+					apr_dir = tar_dir;
+				}
+				else 
+				{
+					apr_dir = tar_dir + 2;
+					apr_dir %= 4;
+				}
+				break;
 			}
 		}
-	}
+	}while (obstruction);
 	if (path[1] != -1)
 	{
 		prev_node = curr_node;
@@ -921,7 +1067,7 @@ void Task_1_1(void)
 void Task_1_2(void)
 {
 	stop();
-	_delay_ms(2000);
+	_delay_ms(500);
 	stop();
 	// switch variable to check if placed
 	int toggle = 0;
@@ -988,10 +1134,13 @@ void Task_1_2(void)
 			break;
 	}
 
-	generate_path(curr_node, 0);
+	generate_path(curr_node, 9);
 	orient(N);
+	forward();
+	_delay_ms(1000);
 	left();	velocity(230, 230);
 	_delay_ms(1000);
+	stop();
 	/*pick_nut();
 	_delay_ms(10000);
 	place_nut();*/
