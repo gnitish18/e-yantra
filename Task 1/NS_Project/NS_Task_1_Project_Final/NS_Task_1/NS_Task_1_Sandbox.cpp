@@ -257,23 +257,18 @@ void line_track(void)
 			}
 			if (obs_confidence > 5)										// If obstracle present, reroute the bot to previous node
 			{
-				printf("\n ADC Conversion %d", ADC_Conversion(4));
-				printf("\nObstracle\n");
 				if (iteration > 120)									// Good clearance for 180 degree turn
 				{
-					printf("Itertion = %f; Case 0", iteration);
 					obstracle(0);
 					break;
 				}
 				else if (iteration < 10)								// No clearance, safe for on spot turn
 				{
-					printf("Iteration = %f; Case 2", iteration);
 					obstracle(2);
 					break;
 				}
 				else
 				{														// No proper clearance, travel back till safe for on spot turn
-					printf("Iteration = %f; Case 1", iteration);
 					obstracle(1);
 					break;
 				}
@@ -450,22 +445,22 @@ void left_turn_wls(int count)
 	while (count-- > 0)
 	{
 		int confidence = 0;									// counter variable for software debounce
-		left();		velocity(150, 150);
-		_delay_ms(250);
+		left();		velocity(250, 250);
+		_delay_ms(150);
 		for (int i = 0; i < confidence_max; i++)			// confirms if left sensor is on black line
 		{
-			if ((ir_array() & 0b010) == 0b010)
+			if ((ir_array() & 0b100) == 0b100)
 				confidence++;
 		}
 		if (confidence > confidence_thresh)
 		{
-			left();		velocity(150, 150);
+			left();		velocity(250, 250);
 			while (1)										// if left sensor is on black, turn left until it is out of the black line
 			{
 				confidence = 0;								// resets 'confidence' variable
 				for (int i = 0; i < confidence_max; i++)	// confirms if out of line via software debouncing
 				{
-					if ((ir_array() & 0b010) == 0)
+					if ((ir_array() & 0b100) == 0)
 						confidence++;
 				}
 				if (confidence > confidence_thresh)
@@ -476,19 +471,18 @@ void left_turn_wls(int count)
 		{
 			left();											// Turn left until left ir sensor detects a black line
 			if (line_memory == 3)
-				velocity(0, 100);							// soft left at critical left turns (eg. last before node)
+				velocity(0, 250);							// soft left at critical left turns (eg. last before node)
 			else
-				velocity(100, 100);
+				velocity(250, 250);
 			confidence = 0;
 			for (int i = 0; i < confidence_max; i++)		// confirms if black line is detected by left sensor
 			{
-				if ((ir_array() & 0b010) == 0b010)
+				if ((ir_array() & 0b100) == 0b100)
 					confidence++;
 			}
 			if (confidence > confidence_thresh)				// confirms and breaks out of the loop
 				break;
 		}
-		_delay_ms(70);
 		stop();
 		_delay_ms(100);										// to stabilize after a turn
 		if (line_memory_rw)
@@ -510,11 +504,11 @@ void right_turn_wls(int count)
 	while (count-- > 0)
 	{
 		int confidence = 0;									// counter variable for software debounce
-		right();		velocity(150, 150);
-		_delay_ms(250);
+		right();		velocity(250, 250);
+		_delay_ms(150);
 		for (int i = 0; i < confidence_max; i++)			// confirms if right sensor is on black line
 		{
-			if ((ir_array() & 0b010) == 0b010)
+			if ((ir_array() & 0b001) == 0b001)
 				confidence++;
 		}
 		if (confidence > confidence_thresh)
@@ -525,7 +519,7 @@ void right_turn_wls(int count)
 				confidence = 0;								// resets 'confidence' variable
 				for (int i = 0; i < confidence_max; i++)	// confirms if out of line via software debouncing
 				{
-					if ((ir_array() & 2) == 0)
+					if ((ir_array() & 1) == 0)
 						confidence++;
 				}
 				if (confidence > confidence_thresh)
@@ -534,21 +528,20 @@ void right_turn_wls(int count)
 		}
 		while (1)
 		{
-			right();		velocity(100, 100);				// Turn right until right ir sensor detects a black line
+			right();		velocity(250, 250);				// Turn right until right ir sensor detects a black line
 			if (line_memory == 2)
-				velocity(0, 100);							// soft right at critical right turns
+				velocity(0, 250);							// soft right at critical right turns
 			else
-				velocity(100, 100);
+				velocity(250, 250);
 			confidence = 0;
 			for (int i = 0; i < confidence_max; i++)		// confirms if black line is detected by right sensor
 			{
-				if ((ir_array() & 2) == 2)
+				if ((ir_array() & 1) == 1)
 					confidence++;
 			}
 			if (confidence > confidence_thresh)				// confirms and breaks out of the loop
 				break;
 		}
-		_delay_ms(70);
 		stop();
 		_delay_ms(100);										// to stabilize after a turn
 		if (line_memory_rw)
