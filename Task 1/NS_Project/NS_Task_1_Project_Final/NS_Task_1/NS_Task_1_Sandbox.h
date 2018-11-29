@@ -73,3 +73,5 @@ void Task_1_1(void);
 * Example Call: Task_1_2();
 */
 void Task_1_2(void);
+
+void test(void);

@@ -342,34 +342,17 @@ void forward_wls(unsigned char node)
 {
 	while (node-- > 0)									// runs for 'node' number of times (number of nodes)
 	{
-		int confidence = 0;								// counter variable for software debounce 
-		forward(); velocity(250, 250);
-		while (1)
+		if (ir_array() == 0b111)
 		{
-			for (int i = 0; i < confidence_max; i++)	// To confirm when out of a node via software debouncing
-			{
-				if (ir_array() != 0b111)
-					confidence++;						// Increment 'confidence' when past node 
-				if (ir_array() == 0b011)				// left sensor out of line
-				{
-					forward(); velocity(250, 125);		// curve right
-				}
-				if (ir_array() == 0b110)				// right sensor out of line
-				{
-					forward(); velocity(125, 250);		// curve left
-				}
-			}
-			if (confidence > confidence_thresh)
-				break;									// confirms and breaks out of the loop
-			_delay_ms(1);
-			confidence = 0;								// resets confidence value
+			forward();	velocity(250, 250);
+			if (obstracle_front == 1)
+				_delay_ms(120);				// to align the centre of the bot close to the node and prevent false detection when there is an independant black line (obstracle) in the front (eg. first node)
+			else
+				_delay_ms(230);
+			stop();
+			_delay_ms(100);
+			stop();
 		}
-		forward();	velocity(150, 150);
-		if (obstracle_front == 1)
-			_delay_ms(63);								// to align the centre of the bot close to the node and prevent false detection when there is an independant black line (obstracle) in the front (eg. first node)
-		else
-			_delay_ms(100);								// to align the centre of the bot on the node to ease turning
-		stop();
 	}
 }
 
@@ -388,10 +371,10 @@ void left_turn_wls(int count)
 	{
 		int confidence = 0;									// counter variable for software debounce
 		left();		velocity(150, 150);
-		_delay_ms(120);
+		_delay_ms(250);
 		for (int i = 0; i < confidence_max; i++)			// confirms if left sensor is on black line
 		{
-			if ((ir_array() & 0b100) == 0b100)
+			if ((ir_array() & 0b010) == 0b010)
 				confidence++;
 		}
 		if (confidence > confidence_thresh)
@@ -402,7 +385,7 @@ void left_turn_wls(int count)
 				confidence = 0;								// resets 'confidence' variable
 				for (int i = 0; i < confidence_max; i++)	// confirms if out of line via software debouncing
 				{
-					if ((ir_array() & 0b100) == 0)
+					if ((ir_array() & 0b010) == 0)
 						confidence++;
 				}
 				if (confidence > confidence_thresh)
@@ -419,13 +402,13 @@ void left_turn_wls(int count)
 			confidence = 0;
 			for (int i = 0; i < confidence_max; i++)		// confirms if black line is detected by left sensor
 			{
-				if ((ir_array() & 0b100) == 0b100)
+				if ((ir_array() & 0b010) == 0b010)
 					confidence++;
 			}
 			if (confidence > confidence_thresh)				// confirms and breaks out of the loop
 				break;
 		}
-		_delay_ms(20);
+		_delay_ms(70);
 		stop();
 		_delay_ms(100);										// to stabilize after a turn
 		if (line_memory_rw)
@@ -448,10 +431,10 @@ void right_turn_wls(int count)
 	{
 		int confidence = 0;									// counter variable for software debounce
 		right();		velocity(150, 150);
-		_delay_ms(120);
+		_delay_ms(250);
 		for (int i = 0; i < confidence_max; i++)			// confirms if right sensor is on black line
 		{
-			if ((ir_array() & 0b001) == 0b001)
+			if ((ir_array() & 0b010) == 0b010)
 				confidence++;
 		}
 		if (confidence > confidence_thresh)
@@ -462,7 +445,7 @@ void right_turn_wls(int count)
 				confidence = 0;								// resets 'confidence' variable
 				for (int i = 0; i < confidence_max; i++)	// confirms if out of line via software debouncing
 				{
-					if ((ir_array() & 1) == 0)
+					if ((ir_array() & 2) == 0)
 						confidence++;
 				}
 				if (confidence > confidence_thresh)
@@ -479,13 +462,13 @@ void right_turn_wls(int count)
 			confidence = 0;
 			for (int i = 0; i < confidence_max; i++)		// confirms if black line is detected by right sensor
 			{
-				if ((ir_array() & 1) == 1)
+				if ((ir_array() & 2) == 2)
 					confidence++;
 			}
 			if (confidence > confidence_thresh)				// confirms and breaks out of the loop
 				break;
 		}
-		_delay_ms(20);
+		_delay_ms(70);
 		stop();
 		_delay_ms(100);										// to stabilize after a turn
 		if (line_memory_rw)
@@ -570,36 +553,6 @@ void R(int count)
 
 /*
 *
-* Function Name: align
-* Input: void
-* Output: void
-* Logic: Use this function to cross a align the bot parallel to the line
-* Example Call: align();
-*
-*/
-void align()
-{
-	while (1)
-	{
-		if (ir_array() == 0b001 || ir_array() == 0b011)
-		{
-			right();	velocity(25, 25);
-		}
-		else if (ir_array() == 0b100 || ir_array() == 0b110)
-		{
-			left();		velocity(25, 25);
-		}
-		if (ir_array() == 0b010)
-		{
-			stop();												//stop and break after aligned
-			break;
-		}
-	}
-	stop();
-}
-
-/*
-*
 * Function Name: filter_color
 * Input: void
 * Output: int
@@ -636,6 +589,7 @@ int filter_color()
 */
 int pick_nut()
 {
+	int confidence,i_c;		//for software debouncing
 	forward_wls(1);
 	printf("\n\n %d \t %d \t %d\n\n",curr_node,prev_node, maze[curr_node][prev_node][1]);
 	if (maze[curr_node][prev_node][1] == E)
@@ -650,28 +604,51 @@ int pick_nut()
 		_delay_ms(100);
 		left_turn_wls(1);
 	}
-	align();								// aligns the bot
+	//align();								// aligns the bot
 	//while (ADC_Conversion(4) > 60)			// moves bot to the proximity of the object
 	//{
 	//	forward();
 	//}
 	_delay_ms(100);
 	stop();
-	if (filter_color() == red)				// picks red nut
-	{
+
+	// picks red nut
+	confidence = 0;
+	for (i_c = 0; i_c < 10; i_c++) {
+		if (filter_color() == red)
+			confidence++;
+		_delay_ms(1);
+	}
+	if (confidence > 5) {
 		pick();
 		return red;
 	}
-	else if (filter_color() == green)		// picks green nut
-	{
+
+	//picks green nut
+	confidence = 0;
+	for (i_c = 0; i_c < 10; i_c++) {
+		if (filter_color() == green)
+			confidence++;
+		_delay_ms(1);
+	}
+	if (confidence > 5) {
 		pick();
 		return green;
 	}
-	else if (filter_color() == brown)		// does not pick obstacles
-	{
+
+	//does not pick obstracle
+	confidence = 0;
+	for (i_c = 0; i_c < 10; i_c++) {
+		if (filter_color() == brown)
+			confidence++;
+		_delay_ms(1);
+	}
+	if (confidence > 5) {
 		return brown;
 	}
-	return clear;							// no object to pick
+	
+	// no object to pick
+	return clear;
 }
 
 /*
@@ -691,7 +668,7 @@ void place_nut()
 		right_turn_wls(1);
 	else if (maze[curr_node][prev_node][1] == E)
 		left_turn_wls(1);
-	align();
+	//align();
 	stop();								// aligns the bot
 	place();								// places the nut in the location
 	nuts_picked += 1;
@@ -1029,4 +1006,31 @@ void Task_1_2(void)
 				printf("%d\t", path[i]);
 		}
 	}*/
+}
+
+void test()
+{
+	line_track();
+	_delay_ms(1000);
+	//forward_wls(1);
+	forward();	velocity(250, 250);
+	_delay_ms(230);
+	stop();
+
+	_delay_ms(2000);
+	line_track();
+	
+	forward();	velocity(250, 250);
+	_delay_ms(230);
+	stop();
+	_delay_ms(100);
+
+	right_turn_wls(1);
+	line_track();
+
+	forward();	velocity(250, 250);
+	_delay_ms(230);
+	stop();
+
+	_delay_ms(10000);
 }
