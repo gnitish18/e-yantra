@@ -4,9 +4,8 @@
 * Author List: Gudapati Nitish, Deepak S V, Jinesh R, Himadri Poddar
 * Filename: NS_Task_1_Sandbox.cpp
 * Theme: Nutty Squirrel -- Specific to eYRC
-* Functions: ir_array(void), line_track(void), F(void), L(void), R(void), forward_wls(unsigned char), left_turn_wls(void), right_turn_wls(void)
-*			Square(void), Task_1_1(void), Task_1_2(void)
-* Global Variables: line_memory, line_memory_rw, line_track_memory, obstracle_front
+* Functions: ir_array(void), obstracle(int), line_track(void), forward_wls(unsigned char), left_turn_wls(int), right_turn_wls(int), Square(void), F(void), L(int), R(int), filter_color(), pick_nut(), place_nut(), generate_path(char, char), orient(int), Task_1_1(void), Task_1_2(void);
+* Global Variables: line_memory, line_memory_rw, line_track_memory, obstracle_front, iteration, maze[][][], path[], prev_node, curr_node, next_node, target_node, obstruction, obs_new_dir, nut_color, nuts_picked, occupied[]
 *
 */
 
@@ -50,7 +49,15 @@ unsigned char line_track_memory = 0;
 */
 unsigned char obstracle_front = 0;
 
-//	Counts the number of iterations in line_track();
+/*	
+*
+*	Counts the number of iterations in line_track();
+*		+1 for foward movement
+*		+0.75 for curve turn
+*		+0.5 for soft turn
+*		+0 for spot turn
+*
+*/
 float iteration = 0;
 
 //	Initializing default values for North, East, South, West
@@ -89,34 +96,10 @@ int maze[24][24][2] = { {	{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1},{-1,-1
 					  };
 
 /*
-*	Variable name: priority_node
-*	1D array that stores details of the priority_node (node to be branched) to be used in Dijikstra`s algorithm
-*/
-int priority_node[3];
-
-/*
-*	Variable name: priority_queue
-*	Acts as priority queue in Dijikstra`s algorithm and stores details of corresponding nodes
-*/
-int priority_queue[24][3];
-
-/*
-*	Variable name: node_pile
-*	Holds the stack of previous priority nodes and helps in creation of final path
-*/
-int node_pile[24][3];
-
-/*
 *	Variable name: path
 *	Array to store node no.s of final path
 */
 char path[24];
-
-/*
-*	Variable name: path_dir
-*	Array to store directions for bot to reach end node
-*/
-char path_dir[24];
 
 /*
 *	Variable name: prev_node
@@ -136,12 +119,11 @@ char curr_node = 0;
 */
 char next_node = 0;
 
-//Stores the destination node of current path
+// Stores the destination node of current path
 char target_node = 0;
 
-//Variables of communication between obstracle() and orient function() to signify node detection and bot facing direction (0 - no change , 1 - 180 deg turn)
+// Variables of communication between obstracle() and orient function() to signify node detection and bot facing direction (0 - no change , 1 - 180 deg turn)
 char obstruction = 0 , obs_new_dir = 0;
-
 
 // colour of the nut picked
 int nut_color;
@@ -155,12 +137,13 @@ unsigned char occupied[4] = { 0,0,0,0 };
 #define confidence_max 20			//max value of confidence in software debouncing
 #define confidence_thresh 14		//threshold for dececion in software debouncing
 
-/* The colours are given specific numerical codes*/
+// The colours are given specific numerical codes
 #define clear 0
 #define red 1
 #define green 2
 #define brown 3
 
+// Function definitions
 unsigned char ir_array(void);
 void obstracle(int);
 void line_track(void);
@@ -198,33 +181,42 @@ unsigned char ir_array(void)
 	return ((left_sensor > 180) * 4 + (centre_sensor > 180) * 2 + (right_sensor > 180));	//converting adc values into a single decimal number based on the binary value
 }
 
+/*
+*
+* Function Name: obstrale
+* Input: int condition
+* Output: void
+* Logic:
+*	Reroutes to previous node when obstracle is detected in path
+*	Cases:
+*		0 - Clearance available, take 180 degree turn
+*		1 - No proper clearance, go back till safe for spot turn
+*		2 - No clearance, spot turn
+*Example Call: obstracle(1);
+*
+*/
 void obstracle(int condition)
 {
 	stop();
 	obstruction = 1;
 	if (!condition)
 	{
-		L(1);
+		L(1);									// Take 180 degree turn and line track till previous node
 		_delay_ms(100);
-		obs_new_dir = 1;
-	//	exit(0);
+		obs_new_dir = 1;						//  Made 180 degree turn
 	}
 	else if (condition == 2)
 	{
 		_delay_ms(100);
-		obs_new_dir = 0;
-	//	exit(0);
+		obs_new_dir = 0;						// Made no turn
 	}
 	else
 	{	
-		back();		velocity(250, 250);
-		printf("\n1 Iteration %f", iteration);
-		_delay_ms((iteration*15)/2);
-		printf("\n2 Iteration %f", iteration);
+		back();		velocity(250, 250);			// go back
+		_delay_ms((iteration*15)/2);			// delay until the node is reached
 		stop();
 		_delay_ms(100);
-		obs_new_dir = 0;
-	//	exit(0);
+		obs_new_dir = 0;						// MAde no turn
 	}
 }
 
@@ -246,16 +238,16 @@ void obstracle(int condition)
 */
 void line_track(void)
 {
-	int confidence = 0, obs_confidence = 0;		// counter variable for software debounce 
-	iteration = 0;					//counts number of iterations
-	int ir_local = -1;		// local variable for ir_array()
+	int confidence = 0, obs_confidence = 0;								// counter variable for software debounce 
+	iteration = 0;														// to estimate approximate distance travelled since start of function
+	int ir_local = -1;													// local variable for ir_array()
 	while (1)
 	{
-		if (ADC_Conversion(4) < 60)
+		if (ADC_Conversion(4) < 60)										// Obstracle detected
 		{
 			stop();
 			obs_confidence = 0;
-			for (int i = 0; i < 10; i++)			// Confirms node detection via software debouncing
+			for (int i = 0; i < 10; i++)								// Confirms obstracle detection via software debouncing
 			{
 				if (ADC_Conversion(4) < 90)
 				{
@@ -263,24 +255,24 @@ void line_track(void)
 				}
 				_delay_ms(1);
 			}
-			if (obs_confidence > 5)
+			if (obs_confidence > 5)										// If obstracle present, reroute the bot to previous node
 			{
 				printf("\n ADC Conversion %d", ADC_Conversion(4));
 				printf("\nObstracle\n");
-				if (iteration > 120)
+				if (iteration > 120)									// Good clearance for 180 degree turn
 				{
 					printf("Itertion = %f; Case 0", iteration);
 					obstracle(0);
 					break;
 				}
-				else if (iteration < 10)
+				else if (iteration < 10)								// No clearance, safe for on spot turn
 				{
 					printf("Iteration = %f; Case 2", iteration);
 					obstracle(2);
 					break;
 				}
 				else
-				{
+				{														// No proper clearance, travel back till safe for on spot turn
 					printf("Iteration = %f; Case 1", iteration);
 					obstracle(1);
 					break;
@@ -288,31 +280,31 @@ void line_track(void)
 			}
 		}
 		_delay_ms(1);
-		ir_local = ir_array();
+		ir_local = ir_array();											// local variable for ir_array storage
 		velocity(250, 250);
-		if (ir_local == 0b010)					// only centre sensor on black line
+		if (ir_local == 0b010)											// only centre sensor on black line
 		{
-			if (line_memory == 2)					// line track with right-centre sensors 
+			if (line_memory == 2)										// line track with right-centre sensors 
 			{
-				forward(); velocity(125, 250);		// curve left
+				forward(); velocity(125, 250);							// curve left
 				iteration += 0.75;
 			}
-			else if (line_memory == 3)				// line track with left-centre sensors
+			else if (line_memory == 3)									// line track with left-centre sensors
 			{
-				forward(); velocity(250, 125);		// curve right
+				forward(); velocity(250, 125);							// curve right
 				iteration += 0.75;
 			}
 			else
 			{
-				forward();							// when tracking with all sensors
+				forward();												// when tracking with all sensors
 				iteration += 1;
 			}
 		}
-		else if (ir_local == 0b001)				// only right sensor on black	
+		else if (ir_local == 0b001)										// only right sensor on black	
 		{
-			if (line_memory == 2)					// line track with right-centre sensors 
+			if (line_memory == 2)										// line track with right-centre sensors 
 			{
-				forward(); velocity(250, 125);		// curve right
+				forward(); velocity(250, 125);							// curve right
 				iteration += 0.75;
 			}
 			else
@@ -320,13 +312,13 @@ void line_track(void)
 				soft_right();
 				iteration += 0.5;
 			}
-			line_track_memory = 1;					// store the movement 
+			line_track_memory = 1;										// store the movement 
 		}
-		else if (ir_array() == 0b100)				// only left sensor on black	
+		else if (ir_array() == 0b100)									// only left sensor on black	
 		{
-			if (line_memory == 3)					// line track with left-centre sensors
+			if (line_memory == 3)										// line track with left-centre sensors
 			{
-				forward(); velocity(125, 250);		// curve left
+				forward(); velocity(125, 250);							// curve left
 				iteration += 0.75;
 			}
 			else
@@ -334,11 +326,11 @@ void line_track(void)
 				soft_left();
 				iteration += 0.5;
 			}
-			line_track_memory = 0;					// store the movement 
+			line_track_memory = 0;										// store the movement 
 		}
-		else if (ir_local == 0b011)				// right-centre sensor on black	
+		else if (ir_local == 0b011)										// right-centre sensor on black	
 		{
-			if (line_memory == 3)					// line track with left-centre sensors
+			if (line_memory == 3)										// line track with left-centre sensors
 			{
 				soft_right();
 				iteration += 0.5;
@@ -348,11 +340,11 @@ void line_track(void)
 				forward();
 				iteration += 1;
 			}
-			line_track_memory = 1;					// store the movement 
+			line_track_memory = 1;										// store the movement 
 		}
-		else if (ir_local == 0b110)				// left-centre sensor on black	
+		else if (ir_local == 0b110)										// left-centre sensor on black	
 		{
-			if (line_memory == 2)					// line track with right-centre sensors 
+			if (line_memory == 2)										// line track with right-centre sensors 
 			{
 				soft_left();
 				iteration += 0.5;
@@ -362,30 +354,30 @@ void line_track(void)
 				forward();
 				iteration += 1;
 			}
-			line_track_memory = 0;					// store the movement 
+			line_track_memory = 0;										// store the movement 
 		}
-		else if (ir_local == 0b101)				// rare case of left-right sensors
+		else if (ir_local == 0b101)										// rare case of left-right sensors
 		{
 			if (line_memory == 0)
 			{
-				soft_left();					//line_memory = 0 => if previous was movement right_turn_wls, right is given priority
+				soft_left();											//line_memory = 0 => if previous was movement right_turn_wls, right is given priority
 				iteration += 0.5;
 			}
 			else if (line_memory == 1)
 			{
-				soft_right();						//line_memory = 1 => if previous was movement left_turn_wls, left is given priority
+				soft_right();											//line_memory = 1 => if previous was movement left_turn_wls, left is given priority
 				iteration += 0.5;
 			}
-			else if (line_memory == 2)				// line track with right-centre sensors 
+			else if (line_memory == 2)									// line track with right-centre sensors 
 			{
 				left();
 			}
-			else if (line_memory == 3)				// line track with left-centre sensors
+			else if (line_memory == 3)									// line track with left-centre sensors
 			{
 				right();
 			}
 		}
-		else if (ir_local == 0)					// out of line
+		else if (ir_local == 0)											// out of line
 		{
 			if (line_track_memory == 0)
 			{
@@ -398,10 +390,10 @@ void line_track(void)
 				iteration += 0.5;
 			}
 		}
-		else										// node detected
-		{
+		else															
+		{																// node detected
 			stop();
-			for (int i = 0; i < 10; i++)			// Confirms node detection via software debouncing
+			for (int i = 0; i < 10; i++)								// Confirms node detection via software debouncing
 			{
 				if (ir_array() == 7)
 				{
@@ -410,7 +402,7 @@ void line_track(void)
 				_delay_ms(1);
 			}
 			if (confidence > 5)
-				break;								// breaks from loop (eventually function) after confirmation
+				break;													// breaks from loop (eventually function) after confirmation
 			confidence = 0;
 		}
 		_delay_ms(1);
@@ -434,7 +426,7 @@ void forward_wls(unsigned char node)
 		{
 			forward();	velocity(250, 250);
 			if (obstracle_front == 1)
-				_delay_ms(120);				// to align the centre of the bot close to the node and prevent false detection when there is an independant black line (obstracle) in the front (eg. first node)
+				_delay_ms(120);							// to align the centre of the bot close to the node and prevent false detection when there is an independant black line (obstracle) in the front (eg. first node)
 			else
 				_delay_ms(230);
 			stop();
@@ -677,16 +669,15 @@ int filter_color()
 */
 int pick_nut()
 {
-	int confidence,i_c;		//for software debouncing
+	int confidence,i_c;																		// for software debouncing
 	forward_wls(1);
-	printf("\n\n %d \t %d \t %d\n\n",curr_node,prev_node, maze[curr_node][prev_node][1]);
-	if (maze[curr_node][prev_node][1] == E)
+	if (maze[curr_node][prev_node][1] == E)													// if approach from East, turn right
 	{
 		right();	velocity(150, 150);
 		_delay_ms(100);
 		right_turn_wls(1);
 	}
-	else if (maze[curr_node][prev_node][1] == W)
+	else if (maze[curr_node][prev_node][1] == W)											// if approach from West, turn right
 	{
 		left();		velocity(150, 150);
 		_delay_ms(100);
@@ -697,36 +688,42 @@ int pick_nut()
 
 	// picks red nut
 	confidence = 0;
-	for (i_c = 0; i_c < 10; i_c++) {
+	for (i_c = 0; i_c < 10; i_c++)															// confirms if red is detected
+	{
 		if (filter_color() == red)
 			confidence++;
 		_delay_ms(1);
 	}
-	if (confidence > 5) {
+	if (confidence > 5) 
+	{
 		pick();
 		return red;
 	}
 
 	//picks green nut
 	confidence = 0;
-	for (i_c = 0; i_c < 10; i_c++) {
+	for (i_c = 0; i_c < 10; i_c++)															// confirms if green is detected
+	{
 		if (filter_color() == green)
 			confidence++;
 		_delay_ms(1);
 	}
-	if (confidence > 5) {
+	if (confidence > 5) 
+	{
 		pick();
 		return green;
 	}
 
 	//does not pick obstracle
 	confidence = 0;
-	for (i_c = 0; i_c < 10; i_c++) {
+	for (i_c = 0; i_c < 10; i_c++) 
+	{
 		if (filter_color() == brown)
 			confidence++;
 		_delay_ms(1);
 	}
-	if (confidence > 5) {
+	if (confidence > 5) 
+	{
 		return brown;
 	}
 	
@@ -745,56 +742,76 @@ int pick_nut()
 */
 void place_nut()
 {
-	forward_wls(1);
-	if (maze[curr_node][prev_node][1] == W)
+	forward_wls(1);									// cross the node
+	if (maze[curr_node][prev_node][1] == W)			// If approach from West, turn right
+	{
 		right_turn_wls(1);
-	else if (maze[curr_node][prev_node][1] == E)
+	}
+	else if (maze[curr_node][prev_node][1] == E)	// If approach from East, turn left
+	{
 		left_turn_wls(1);
-	stop();								
-	place();								// places the nut in the location
-	nuts_picked += 1;
+	}stop();
+	place();										// places the nut in the location
+	nuts_picked += 1;								// Increment number of nuts picked
 }
 
 /*
 * Function Name: generate_path
 * Input: char,char
 * Output: void
-* Logic: Generates the shortest/fastest path using Djikstra`s algorithm between the inputed start and end nodes and stores nodes in path[] & path directions in path_dir[]
+* Logic: Generates the shortest/fastest path using Djikstra`s algorithm between the inputed start and end nodes and stores nodes in path[]
 * Example Call: generate_path(2,13);
 */
 void generate_path(char start_node, char end_node)
 {
+	// 1D array that stores details of the priority_node (node to be branched) to be used in Dijikstra`s algorithm
+	int priority_node[3];
+
+	// Acts as priority queue in Dijikstra`s algorithm and stores details of corresponding nodes
+	int priority_queue[24][3];
+
+	// Holds the stack of previous priority nodes and helps in creation of final path
+	int node_pile[24][3];
+
 	int i_pq = 0, swap_pq[3], pq_node_repeat, i_np = 0, i_path = 1, swap_path;
 	target_node = end_node;
 	//priority_node = start_node
 	priority_node[0] = start_node;	priority_node[1] = 0;	priority_node[2] = 0;
-	do {
+	do 
+	{
 		//Dead End Cases elimination
-		if ((start_node == 9 && end_node == 0) || start_node == end_node) {
+		if ((start_node == 9 && end_node == 0) || start_node == end_node) 
+		{
 			priority_node[1] = start_node;
 			break;
 		}
 		//Creating/adding to priority_queue
 		for (int i = 0; i < 24; i++)
 		{
-			if (maze[priority_node[0]][i][0] != -1 && i != priority_node[1]) {
+			if (maze[priority_node[0]][i][0] != -1 && i != priority_node[1]) 
+			{
 				pq_node_repeat = 0;
 				for (int j = 0; j < i_pq; j++)
 					if (priority_queue[j][0] == i) {
 						pq_node_repeat = 1;
-						if (priority_node[2] + maze[priority_node[0]][i][0] < priority_queue[j][2]) {
+						if (priority_node[2] + maze[priority_node[0]][i][0] < priority_queue[j][2]) 
+						{
 							priority_queue[j][2] = priority_node[2] + maze[priority_node[0]][i][0];
 							priority_queue[j][1] = priority_node[0];
 						}
 						break;
 					}
 				for (int j = 0; j < i_np; j++)
-					if (node_pile[j][0] == i) {
+					if (node_pile[j][0] == i) 
+					{
 						pq_node_repeat = 1;
 						break;
 					}
-				if (pq_node_repeat == 0) {
-					priority_queue[i_pq][0] = i;	priority_queue[i_pq][1] = priority_node[0];		priority_queue[i_pq][2] = priority_node[2] + maze[priority_node[0]][i][0];
+				if (pq_node_repeat == 0) 
+				{
+					priority_queue[i_pq][0] = i;	
+					priority_queue[i_pq][1] = priority_node[0];		
+					priority_queue[i_pq][2] = priority_node[2] + maze[priority_node[0]][i][0];
 					i_pq += 1;
 				}
 			}
@@ -802,10 +819,14 @@ void generate_path(char start_node, char end_node)
 		priority_queue[i_pq][0] = -1;
 
 		//Sorting priority_queue
-		for (int i = 0; i < i_pq; i++) {
-			for (int j = i + 1; j < i_pq; j++) {
-				if (priority_queue[j][2] < priority_queue[i][2]) {
-					for (int k = 0; k < 3; k++) {
+		for (int i = 0; i < i_pq; i++) 
+		{
+			for (int j = i + 1; j < i_pq; j++) 
+			{
+				if (priority_queue[j][2] < priority_queue[i][2]) 
+				{
+					for (int k = 0; k < 3; k++) 
+					{
 						swap_pq[k] = priority_queue[i][k];
 						priority_queue[i][k] = priority_queue[j][k];
 						priority_queue[j][k] = swap_pq[k];
@@ -816,16 +837,22 @@ void generate_path(char start_node, char end_node)
 
 		//Add priority_node to node_pile
 		for (int i = 0; i < 3; i++)
+		{
 			node_pile[i_np][i] = priority_node[i];
+		}
 		i_np += 1;
 
 		//Update priority_node
 		for (int i = 0; i < 3; i++)
+		{
 			priority_node[i] = priority_queue[0][i];
+		}
 		//Move priority_queue by 1 step
 		for (int i = 1; i < 24 && priority_queue[i][0] != -1; i++)
 			for (int k = 0; k < 3; k++)
+			{
 				priority_queue[i - 1][k] = priority_queue[i][k];
+			}
 		priority_queue[--i_pq][0] = -1;
 	} while (priority_node[0] != end_node);		//Djikstra`s Algorithm stops only when the end node reaches the top of the priority queue
 
@@ -845,7 +872,8 @@ void generate_path(char start_node, char end_node)
 	}
 	
 	//Reversing path matrix to ascending order of path
-	for (int i = 0; i <= i_path / 2; i++) {
+	for (int i = 0; i <= i_path / 2; i++) 
+	{
 		swap_path = path[i];
 		path[i] = path[i_path - i];
 		path[i_path - i] = swap_path;
@@ -859,112 +887,140 @@ void generate_path(char start_node, char end_node)
 }
 
 /*
-*	
+*
+* Function Name: orient(int);
+* Input: int apr_dir // approach direction
+* Output: void
+* Logic: Use this function to move to the destination node through the generated path using the approach direction
+*		The navigation is based on the approach direction and target direction
+*		Cases:
+*			turns right in case of N-W, W-S, S-E, E-N (APPROACH DIRECTION - TARGET DIRECTION)
+*			turns left in case of N-E, E-S, S-W, W-N (APPROACH DIRECTION - TARGET DIRECTION)
+*			moves forward in case of N-S, S-N, E-W, W-E (APPROACH DIRECTION - TARGET DIRECTION)
+*			case of N-N, S-S, E-E, W-W (APPROACH DIRECTION - TARGET DIRECTION)
+*				
+* Example Call: Task_1_1();
 *
 */
 void orient(int apr_dir)
 {
 	do
 	{
-		obstruction = 0;
-		printf("\n###########################apr_dir=%d#####################\n", apr_dir);
-		char sd_complete, sd_else;	//flags for same direction case
-		for (int index = 0; path[index + 1] != -1; index++)
+		obstruction = 0;																	// no obstruction
+		char sd_complete, sd_else;															// flags for same direction case
+		for (int index = 0; path[index + 1] != -1; index++)									// traverse until generated path is complete
 		{
-			curr_node = path[index];
+			curr_node = path[index];														// update current node
 			if (index)
-				prev_node = path[index - 1];
-			next_node = path[index + 1];
-			printf("\n %d \t %d \t %d", curr_node, prev_node, next_node);
+				prev_node = path[index - 1];												// update previous node
+			next_node = path[index + 1];													// update next node
+
 			// target direction
 			int tar_dir;
+
 			if (!(apr_dir != -1 && index == 0))
-				apr_dir = maze[curr_node][prev_node][1];
-			printf("\t%d", apr_dir);
-			tar_dir = maze[curr_node][next_node][1];
-			if (apr_dir - tar_dir == 1 || apr_dir - tar_dir == -3)
+				apr_dir = maze[curr_node][prev_node][1];									// update approach direction
+			
+			tar_dir = maze[curr_node][next_node][1];										// update target direction
+			
+			if (apr_dir - tar_dir == 1 || apr_dir - tar_dir == -3)							// turns right in case of N-W, W-S, S-E, E-N (APPROACH DIRECTION - TARGET DIRECTION)
 			{
 				R(1);
 			}
-			else if (apr_dir - tar_dir == -1 || apr_dir - tar_dir == 3)
+			else if (apr_dir - tar_dir == -1 || apr_dir - tar_dir == 3)						// turns left in case of N-E, E-S, S-W, W-N (APPROACH DIRECTION - TARGET DIRECTION)
 			{
 				L(1);
 			}
-			else if (apr_dir - tar_dir == 2 || apr_dir - tar_dir == -2)
+			else if (apr_dir - tar_dir == 2 || apr_dir - tar_dir == -2)						// moves forward in case of N-S, S-N, E-W, W-E (APPROACH DIRECTION - TARGET DIRECTION)
 			{
 				F();
 			}
 			else
-			{
-				if (apr_dir == N)
+			{																				// case of N-N, S-S, E-E, W-W (APPROACH DIRECTION - TARGET DIRECTION)
+				if (apr_dir == N)															// N-N Case
 				{
-					sd_complete = 0; sd_else = 1;
+					sd_complete = 0; sd_else = 1;											// flag update for same direction // eg if a node to right or left of current facing is present
 					for (int j = 0; j < 24; j++)
-						if (maze[curr_node][j][1] == W) {
+						if (maze[curr_node][j][1] == W)										
+						{
 							sd_complete = 1;
 							break;
 						}
-					if (!sd_complete) {
+					if (!sd_complete) 
+					{
 						R(1); sd_else = 0;
 					}
-					if (sd_complete) {
+					if (sd_complete) 
+					{
 						sd_complete = 0;
 						for (int j = 0; j < 24; j++)
-							if (maze[curr_node][j][1] == E) {
+							if (maze[curr_node][j][1] == E) 
+							{
 								sd_complete = 1;
 								break;
 							}
-						if (!sd_complete) {
+						if (!sd_complete) 
+						{
 							L(1); sd_else = 0;
 						}
 					}
 					if (sd_else)
 						R(2);
 				}
-				else if (apr_dir == E)
+				else if (apr_dir == E)														// E-E Case
 				{
 					sd_complete = 0; sd_else = 1;
 					for (int j = 0; j < 24; j++)
-						if (maze[curr_node][j][1] == N) {
+						if (maze[curr_node][j][1] == N) 
+						{
 							sd_complete = 1;
 							break;
 						}
-					if (!sd_complete) {
+					if (!sd_complete) 
+					{
 						R(1); sd_else = 0;
 					}
-					if (sd_complete) {
+					if (sd_complete) 
+					{
 						sd_complete = 0;
 						for (int j = 0; j < 24; j++)
-							if (maze[curr_node][j][1] == S) {
+							if (maze[curr_node][j][1] == S) 
+							{
 								sd_complete = 1;
 								break;
 							}
-						if (!sd_complete) {
+						if (!sd_complete) 
+						{
 							L(1); sd_else = 0;
 						}
 					}
 					if (sd_else)
 						R(2);
 				}
-				else if (apr_dir == W)
+				else if (apr_dir == W)														// W-W Case
 				{
 					sd_complete = 0; sd_else = 1;
 					for (int j = 0; j < 24; j++)
-						if (maze[curr_node][j][1] == N) {
+						if (maze[curr_node][j][1] == N) 
+						{
 							sd_complete = 1;
 							break;
 						}
-					if (!sd_complete) {
+					if (!sd_complete) 
+					{
 						L(1); sd_else = 0;
 					}
-					if (sd_complete) {
+					if (sd_complete) 
+					{
 						sd_complete = 0;
 						for (int j = 0; j < 24; j++)
-							if (maze[curr_node][j][1] == S) {
+							if (maze[curr_node][j][1] == S) 
+							{
 								sd_complete = 1;
 								break;
 							}
-						if (!sd_complete) {
+						if (!sd_complete) 
+						{
 							R(1); sd_else = 0;
 						}
 					}
@@ -972,50 +1028,55 @@ void orient(int apr_dir)
 						L(2);
 				}
 				else
-				{
+				{																			// S-S Case
 					sd_complete = 0; sd_else = 1;
-					printf("\nIN\n");
 					for (int j = 0; j < 24; j++)
-						if (maze[curr_node][j][1] == W) {
+						if (maze[curr_node][j][1] == W) 
+						{
 							sd_complete = 1;
 							break;
 						}
-					if (!sd_complete) {
+					if (!sd_complete) 
+					{
 						L(1); sd_else = 0;
 					}
-					if (sd_complete) {
+					if (sd_complete) 
+					{
 						sd_complete = 0;
 						for (int j = 0; j < 24; j++)
-							if (maze[curr_node][j][1] == E) {
+							if (maze[curr_node][j][1] == E) 
+							{
 								sd_complete = 1;
 								break;
 							}
-						if (!sd_complete) {
+						if (!sd_complete) 
+						{
 							R(1); sd_else = 0;
 						}
 					}
 					if (sd_else)
 						L(2);
-					printf("\nOUT\n");
 				}
 			}
-			if (obstruction)
+			if (obstruction)																// if obstruction present
 			{
-				maze[curr_node][next_node][0] = -1;	maze[curr_node][next_node][1] = -1;
-				maze[next_node][curr_node][0] = -1;	maze[next_node][curr_node][1] = -1;
-				generate_path(curr_node, target_node);
-				if (obs_new_dir) {
-					apr_dir = tar_dir;
+				maze[curr_node][next_node][0] = -1;	maze[curr_node][next_node][1] = -1;		// block path due to obstruction
+				maze[next_node][curr_node][0] = -1;	maze[next_node][curr_node][1] = -1;		// block path due to obstruction
+				generate_path(curr_node, target_node);										// generate path
+				if (obs_new_dir) 
+				{
+					apr_dir = tar_dir;														// update approach direction after 180 degree turn
 				}
 				else 
 				{
-					apr_dir = tar_dir + 2;
+					apr_dir = tar_dir + 2;													// update approach direction after no turn
 					apr_dir %= 4;
 				}
-				break;
+				break;																		// break from the loop 
 			}
 		}
-	}while (obstruction);
+	}while (obstruction);																	// repeats until obstruction is present
+
 	if (path[1] != -1)
 	{
 		prev_node = curr_node;
@@ -1030,6 +1091,7 @@ void orient(int apr_dir)
 * Output: void
 * Logic: Use this function to encapsulate the Task 1.1 logic
 * Example Call: Task_1_1();
+*
 */
 void Task_1_1(void)
 {
@@ -1066,9 +1128,10 @@ void Task_1_1(void)
 */
 void Task_1_2(void)
 {
-	stop();
+
 	_delay_ms(500);
-	stop();
+	stop();														// Wait for the microcontroller to respond
+
 	// switch variable to check if placed
 	int toggle = 0;
 
@@ -1076,31 +1139,30 @@ void Task_1_2(void)
 	curr_node = 9;
 	prev_node = 0;
 
-	for (int i = 17; i <= 23; i++)
+	for (int i = 17; i <= 23; i++)								// Pick-up zone nodes traversal
 	{
 		if (i == 20)
-			continue;
-		generate_path(curr_node, i);
+			continue;											// Skip pickup from node 20 due to absence of pickup location
+		generate_path(curr_node, i);							// genreates node path from current node to pickup zone node
 		if (!toggle)
-			orient(-1);
+			orient(-1);											// traverse to throught he path towards target direction
 		else
-			orient(N);
+			orient(N);											// traverse to throught he path towards north
 		toggle = 0;
 		nut_color = pick_nut();
-		printf("\n************ %d ***********\n ", nut_color);
 		if (nut_color == red)
 		{
 			if (!occupied[0])
 			{
-				generate_path(i, 1);
-				occupied[0] = 1;
+				generate_path(i, 1);							// genreates node path from current node to red pickup zone node
+				occupied[0] = 1;								// updates occupancy status
 			}
 			else
 			{
-				generate_path(i, 4);
-				occupied[1] = 1;
+				generate_path(i, 4);							// genreates node path from current node to red pickup zone node
+				occupied[1] = 1;								// updates occupancy status
 			}
-			orient(S);
+			orient(S);											// traverse to throught he path towards south
 			place_nut();
 			toggle = 1;
 		}
@@ -1108,78 +1170,35 @@ void Task_1_2(void)
 		{
 			if (!occupied[2])
 			{
-				generate_path(i, 7);
-				occupied[2] = 1;
+				generate_path(i, 7);							// genreates node path from current node to green pickup zone node
+				occupied[2] = 1;								// updates occupancy status
 			}
 			else
 			{
-				generate_path(i, 2);
-				occupied[3] = 1;
+				generate_path(i, 2);							// genreates node path from current node to green pickup zone node
+				occupied[3] = 1;								// updates occupancy status
 			}
-			orient(S);
+			orient(S);											// traverse to throught he path towards south
 			place_nut();
 			toggle = 1;
 		}
 		else if (nut_color == clear)
 		{
 			if (i == 23)
-				break;
-		//	if (i != 19)
-				generate_path(i, i + 1);
-		//	else
-		//		generate_path(i, i + 2);
-			orient(S);
+				break;											// break loop if last node
+			generate_path(i, i + 1);							// genreates node path from current node to next node in pickup zone
+			orient(S);											// traverse to throught he path towards south
 		}
 		if (nuts_picked == 4)
 			break;
 	}
 
-	generate_path(curr_node, 9);
-	orient(N);
-	forward();
+	generate_path(curr_node, 9);								// genreates node path from current node to next 9
+	orient(N);													// traverse to throught he path towards north
+	forward();													// move to start
 	_delay_ms(1000);
-	left();	velocity(230, 230);
+	left();	velocity(230, 230);									// orient as it was at start
 	_delay_ms(1000);
 	stop();
-	/*pick_nut();
-	_delay_ms(10000);
-	place_nut();*/
-	/*
-	for (int k = 0; k < 24; k++)
-	{
-		for (int l = 0; l < 24; l++)
-		{
-			generate_path(k, l);
-			printf("\n");
-			for (int i = 0; path[i] != -1; i++)
-				printf("%d\t", path[i]);
-		}
-	}*/
-}
-
-void test()
-{
-	line_track();
-	_delay_ms(1000);
-	//forward_wls(1);
-	forward();	velocity(250, 250);
-	_delay_ms(230);
-	stop();
-
-	_delay_ms(2000);
-	line_track();
-	
-	forward();	velocity(250, 250);
-	_delay_ms(230);
-	stop();
-	_delay_ms(100);
-
-	right_turn_wls(1);
-	line_track();
-
-	forward();	velocity(250, 250);
-	_delay_ms(230);
-	stop();
-
-	_delay_ms(10000);
+	_delay_ms(3000);
 }
