@@ -1,4 +1,4 @@
-# e-yantra - Robotics Competition
+# 'e-yantra' - Robotics Competition
 
 This repository consists of all the files of the e-yantra competition of theme Nutty Squirrel
 
