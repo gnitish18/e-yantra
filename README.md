@@ -1,7 +1,24 @@
-# 'e-yantra' - Robotics Competition
+# eYantra: Maze Solving Line Follower Bot
+This repository contains the codes and videos of a Maze Solving Line Follower Robot we built as a part of the e-Yantra 2018 Competition conducted by IIT Bombay, along with the simulations done on V-Rep. The arena consists of elevated terrains and we also built a lift mehanism to enable the bot to climb up & down the elevated terrain autonomously.
 
-This repository consists of all the files of the e-yantra competition of theme Nutty Squirrel
+**Playlist of the Project's Videos:** https://youtube.com/playlist?list=PLuR39FtkMtNWYtH3aQnq-jO5Gc9pRplao
 
-Whenever you change any code, create a new branch and then commit and push the changes to the branch.
-If your code works perfectly and is better than the current version of the code, then you can merge it to the master branch.
-Follow this so that we don't have to revert to the previous commits often.
+**Note: The Codes and Videos of each task can be found in the individual Task folders, in this root directory.**
+
+# Gallery
+
+## Robot: ##
+![Robot](/Files/Bot.jpg?raw=true "Robot")
+
+## Circuit: ##
+![Circuit Diagram](/Files/Circuit_Diagram.jpg?raw=true "Circuit Diagram")
+![Circuit](/Files/Circuit.jpg?raw=true "Circuit")
+
+## V-Rep Simulation: ##
+![V-Rep Simulation](/Task-1/V-Rep_Simulation.png?raw=true "V-Rep Simulation")
+
+## Lift Mechanism: ##
+![Lift Mechanism](/Task-3/Lift_Mechanism.png?raw=true "Lift Mechanism")
+
+## Final Arena: ##
+![Final Arena](/Final_Task/Final_Arena.png?raw=true "Final Arena")
